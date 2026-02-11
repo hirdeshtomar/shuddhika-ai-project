@@ -1,0 +1,294 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for dashboard authentication
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaigns Campaign[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+// Lead model - potential customers
+model Lead {
+  id           String     @id @default(cuid())
+  name         String
+  phone        String     @unique
+  email        String?
+  businessName String?
+  businessType String?    // grocery, retail, restaurant, etc.
+  source       LeadSource @default(MANUAL)
+  status       LeadStatus @default(NEW)
+  tags         String[]   @default([])
+
+  // Location details
+  city         String?
+  state        String?
+  pincode      String?
+  address      String?
+
+  // Engagement tracking
+  lastContactedAt DateTime?
+  notes           String?
+  optedOut        Boolean  @default(false)
+  optedOutAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages     MessageLog[]
+  campaignLeads CampaignLead[]
+
+  @@index([phone])
+  @@index([status])
+  @@index([source])
+  @@index([city])
+  @@map("leads")
+}
+
+enum LeadSource {
+  MANUAL
+  CSV_IMPORT
+  JUSTDIAL
+  INDIAMART
+  GOOGLE_MAPS
+  FACEBOOK
+  INSTAGRAM
+  WEBSITE
+  REFERRAL
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  NEGOTIATING
+  CONVERTED
+  REJECTED
+  DO_NOT_CONTACT
+}
+
+// Message template model - for WhatsApp pre-approved templates
+model MessageTemplate {
+  id                  String           @id @default(cuid())
+  name                String           @unique
+  content             String           // Template content with {{1}}, {{2}} placeholders
+  language            String           @default("hi") // hi for Hindi, en for English
+  category            TemplateCategory @default(MARKETING)
+  whatsappTemplateId  String?          // Meta's template ID after approval
+  whatsappTemplateName String?         // Name in Meta's system
+  status              TemplateStatus   @default(DRAFT)
+
+  // Template components for WhatsApp
+  headerType          String?          // TEXT, IMAGE, VIDEO, DOCUMENT
+  headerContent       String?          // URL or text
+  bodyText            String           // Main message body
+  footerText          String?
+  buttons             Json?            // Array of button objects
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaigns Campaign[]
+  messages  MessageLog[]
+
+  @@map("message_templates")
+}
+
+enum TemplateCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+}
+
+enum TemplateStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+// Campaign model - outreach campaigns
+model Campaign {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  type        CampaignType   @default(WHATSAPP)
+  status      CampaignStatus @default(DRAFT)
+
+  // Template reference
+  templateId  String
+  template    MessageTemplate @relation(fields: [templateId], references: [id])
+
+  // Target audience filters (stored as JSON)
+  targetFilters Json?        // { status: [], source: [], tags: [], cities: [] }
+
+  // Scheduling
+  scheduledAt   DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  // Stats (denormalized for quick access)
+  totalLeads    Int @default(0)
+  sentCount     Int @default(0)
+  deliveredCount Int @default(0)
+  readCount     Int @default(0)
+  failedCount   Int @default(0)
+
+  // Creator
+  createdById String
+  createdBy   User @relation(fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  leads    CampaignLead[]
+  messages MessageLog[]
+
+  @@map("campaigns")
+}
+
+enum CampaignType {
+  WHATSAPP
+  SMS
+  CALL
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+// Campaign-Lead junction table
+model CampaignLead {
+  id         String              @id @default(cuid())
+  campaignId String
+  campaign   Campaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  leadId     String
+  lead       Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  status     CampaignLeadStatus  @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([campaignId, leadId])
+  @@map("campaign_leads")
+}
+
+enum CampaignLeadStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  OPTED_OUT
+}
+
+// Message log - tracks all sent messages
+model MessageLog {
+  id         String        @id @default(cuid())
+  leadId     String
+  lead       Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  campaignId String?
+  campaign   Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  templateId String?
+  template   MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  channel    MessageChannel @default(WHATSAPP)
+  direction  MessageDirection @default(OUTBOUND)
+
+  // WhatsApp specific
+  whatsappMessageId String?  @unique
+
+  // Message content (for logging)
+  content    String?
+
+  // Status tracking
+  status     MessageStatus @default(PENDING)
+  sentAt     DateTime?
+  deliveredAt DateTime?
+  readAt     DateTime?
+  failedAt   DateTime?
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leadId])
+  @@index([campaignId])
+  @@index([whatsappMessageId])
+  @@index([status])
+  @@map("message_logs")
+}
+
+enum MessageChannel {
+  WHATSAPP
+  SMS
+  CALL
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  PENDING
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+// Scraper job tracking
+model ScraperJob {
+  id         String       @id @default(cuid())
+  source     LeadSource
+  query      String       // Search query (e.g., "grocery stores in Delhi")
+  status     JobStatus    @default(PENDING)
+
+  // Results
+  leadsFound  Int @default(0)
+  leadsAdded  Int @default(0)
+  duplicates  Int @default(0)
+
+  // Error tracking
+  errorMessage String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("scraper_jobs")
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
