@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Search, ArrowLeft, Send, Clock, Check, CheckCheck, Eye, AlertCircle,
+  Search, ArrowLeft, Send, Clock, Check, CheckCheck, AlertCircle,
   FileText, X, User,
 } from 'lucide-react';
 import { conversationsApi, templatesApi } from '../services/api';
