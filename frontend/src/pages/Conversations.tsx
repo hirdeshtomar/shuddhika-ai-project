@@ -15,17 +15,17 @@ export default function Conversations() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Contact list
+  // Contact list — disable auto-refetch during active search
   const { data: contactsData, isLoading: contactsLoading } = useQuery({
     queryKey: ['conversations', searchQuery],
     queryFn: () => conversationsApi.list({ search: searchQuery || undefined, limit: 50 }),
-    refetchInterval: 10000,
+    refetchInterval: searchQuery ? false : 10000,
   });
 
   const conversations: Conversation[] = contactsData?.data || [];
 
   // Messages for selected lead
-  const { data: messagesData } = useQuery({
+  const { data: messagesData, isError: messagesError } = useQuery({
     queryKey: ['conversation-messages', selectedLeadId],
     queryFn: () => conversationsApi.getMessages(selectedLeadId!, { limit: 100 }),
     enabled: !!selectedLeadId,
@@ -41,7 +41,7 @@ export default function Conversations() {
     onSuccess: () => {
       setMessageText('');
       queryClient.invalidateQueries({ queryKey: ['conversation-messages', selectedLeadId] });
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['conversations', searchQuery], exact: true });
     },
   });
 
@@ -52,7 +52,7 @@ export default function Conversations() {
     onSuccess: () => {
       setShowTemplateModal(false);
       queryClient.invalidateQueries({ queryKey: ['conversation-messages', selectedLeadId] });
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['conversations', searchQuery], exact: true });
     },
   });
 
@@ -178,7 +178,13 @@ export default function Conversations() {
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1">
-              {messages.length === 0 ? (
+              {messagesError ? (
+                <div className="text-center py-10">
+                  <p className="text-sm text-red-600 bg-white/80 rounded-lg inline-block px-4 py-2">
+                    Failed to load messages. Retrying...
+                  </p>
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="text-center py-10">
                   <p className="text-sm text-gray-600 bg-white/80 rounded-lg inline-block px-4 py-2">
                     No messages yet. Send a template to start the conversation.

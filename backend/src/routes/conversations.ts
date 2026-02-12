@@ -116,7 +116,7 @@ router.get('/:leadId/messages', authenticate, async (req: AuthenticatedRequest, 
   const [messages, total] = await Promise.all([
     prisma.messageLog.findMany({
       where: { leadId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'asc' },
       skip,
       take: limit,
       select: {
@@ -145,7 +145,7 @@ router.get('/:leadId/messages', authenticate, async (req: AuthenticatedRequest, 
     success: true,
     data: {
       lead,
-      messages: messages.reverse(),
+      messages,
     },
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
