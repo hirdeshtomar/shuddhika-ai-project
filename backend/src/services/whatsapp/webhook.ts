@@ -94,7 +94,10 @@ async function processStatusUpdate(status: WhatsAppMessageStatus): Promise<void>
  * Handle incoming messages from leads
  */
 async function processIncomingMessage(message: WhatsAppIncomingMessage): Promise<void> {
-  const { from, id, text, type } = message;
+  const { from, id } = message;
+
+  // Extract readable content based on message type
+  const content = extractMessageContent(message);
 
   // Find lead by phone number
   const lead = await prisma.lead.findUnique({
@@ -103,16 +106,14 @@ async function processIncomingMessage(message: WhatsAppIncomingMessage): Promise
 
   if (!lead) {
     console.log(`Lead not found for phone: ${from}`);
-    // Optionally create a new lead
     return;
   }
 
   // Check for opt-out keywords
-  const messageText = text?.body?.toLowerCase() || '';
+  const messageText = content.toLowerCase();
   const optOutKeywords = ['stop', 'unsubscribe', 'opt out', 'रोकें', 'बंद करो'];
 
   if (optOutKeywords.some((keyword) => messageText.includes(keyword))) {
-    // Mark lead as opted out
     await prisma.lead.update({
       where: { id: lead.id },
       data: {
@@ -133,23 +134,49 @@ async function processIncomingMessage(message: WhatsAppIncomingMessage): Promise
       channel: 'WHATSAPP',
       direction: 'INBOUND',
       whatsappMessageId: id,
-      content: text?.body || `[${type}]`,
+      content,
       status: 'DELIVERED',
       deliveredAt: new Date(),
     },
   });
 
-  console.log(`Received message from lead ${lead.id}: ${text?.body || type}`);
+  console.log(`Received message from lead ${lead.id}: ${content}`);
 
   // Send push notification
   const senderName = lead.name || lead.phone;
-  const msgPreview = text?.body || `[${type} message]`;
+  const msgPreview = content.length > 100 ? content.slice(0, 100) + '...' : content;
   sendPushNotification({
     title: `New message from ${senderName}`,
-    body: msgPreview.length > 100 ? msgPreview.slice(0, 100) + '...' : msgPreview,
+    body: msgPreview,
     url: `/conversations?lead=${lead.id}`,
     tag: `msg-${lead.id}`,
   }).catch((err) => console.error('Push notification error:', err));
+}
+
+/**
+ * Extract human-readable content from any WhatsApp message type
+ */
+function extractMessageContent(message: WhatsAppIncomingMessage): string {
+  switch (message.type) {
+    case 'text':
+      return message.text?.body || '[Text]';
+    case 'button':
+      return message.button?.text || '[Button]';
+    case 'interactive':
+      return message.interactive?.button_reply?.title
+        || message.interactive?.list_reply?.title
+        || '[Interactive]';
+    case 'image':
+      return message.image?.caption || '[Image]';
+    case 'video':
+      return message.video?.caption || '[Video]';
+    case 'document':
+      return message.document?.caption || `[Document: ${message.document?.filename || 'file'}]`;
+    case 'location':
+      return message.location?.name || message.location?.address || '[Location]';
+    default:
+      return `[${message.type}]`;
+  }
 }
 
 /**

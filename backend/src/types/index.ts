@@ -146,6 +146,16 @@ export interface WhatsAppIncomingMessage {
   timestamp: string;
   type: string;
   text?: { body: string };
+  button?: { text: string; payload?: string };
+  interactive?: {
+    type: string;
+    button_reply?: { id: string; title: string };
+    list_reply?: { id: string; title: string; description?: string };
+  };
+  image?: { id: string; mime_type: string; caption?: string };
+  video?: { id: string; mime_type: string; caption?: string };
+  document?: { id: string; mime_type: string; filename?: string; caption?: string };
+  location?: { latitude: number; longitude: number; name?: string; address?: string };
 }
 
 // CSV Import types
