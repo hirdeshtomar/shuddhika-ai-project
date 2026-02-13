@@ -132,7 +132,7 @@ router.get('/:leadId/messages', authenticate, async (req: AuthenticatedRequest, 
         errorMessage: true,
         createdAt: true,
         template: {
-          select: { name: true, bodyText: true },
+          select: { name: true, bodyText: true, headerType: true, headerContent: true },
         },
         campaign: {
           select: { name: true },
@@ -232,19 +232,19 @@ router.post('/:leadId/send-template', authenticate, async (req: AuthenticatedReq
   if (!template.whatsappTemplateName) throw new AppError('Template not configured for WhatsApp', 400);
   if (lead.optedOut) throw new AppError('Cannot send messages to opted-out leads', 400);
 
+  // Build header params for templates with IMAGE/VIDEO headers
+  const mediaUrl = headerMediaUrl || template.headerContent || undefined;
+
   const messageLog = await prisma.messageLog.create({
     data: {
       leadId,
       templateId,
       channel: 'WHATSAPP',
       direction: 'OUTBOUND',
-      content: template.bodyText,
+      content: mediaUrl ? JSON.stringify({ text: template.bodyText, mediaUrl, mediaType: template.headerType }) : template.bodyText,
       status: 'PENDING',
     },
   });
-
-  // Build header params for templates with IMAGE/VIDEO headers
-  const mediaUrl = headerMediaUrl || template.headerContent || undefined;
   let headerParams: { type: 'text' | 'image' | 'video'; value: string } | undefined;
   if (template.headerType === 'IMAGE' && mediaUrl) {
     headerParams = { type: 'image', value: mediaUrl };

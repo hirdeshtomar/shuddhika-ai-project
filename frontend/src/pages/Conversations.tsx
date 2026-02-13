@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, ArrowLeft, Send, Clock, Check, CheckCheck, AlertCircle,
-  FileText, X, User,
+  FileText, X, User, Play, Image,
 } from 'lucide-react';
 import { conversationsApi, templatesApi } from '../services/api';
 import type { Conversation, MessageLogEntry, MessageStatus, MessageTemplate } from '../types';
@@ -272,9 +272,26 @@ function Avatar({ name }: { name: string }) {
 function ChatBubble({ message }: { message: MessageLogEntry }) {
   const isOutbound = message.direction === 'OUTBOUND';
 
-  const bubbleContent = message.content
-    || message.template?.bodyText
-    || '[Message]';
+  // Parse content that may contain JSON with media info
+  let textContent = message.content || message.template?.bodyText || '[Message]';
+  let mediaUrl: string | undefined;
+  let mediaType: string | undefined;
+
+  if (message.content && message.content.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(message.content);
+      textContent = parsed.text || message.template?.bodyText || '[Message]';
+      mediaUrl = parsed.mediaUrl;
+      mediaType = parsed.mediaType;
+    } catch { /* not JSON, use as-is */ }
+  }
+
+  // Also check template headerType for older messages without JSON content
+  if (!mediaUrl && message.template?.headerType === 'VIDEO') {
+    mediaType = 'VIDEO';
+  } else if (!mediaUrl && message.template?.headerType === 'IMAGE') {
+    mediaType = 'IMAGE';
+  }
 
   return (
     <div className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}>
@@ -285,7 +302,22 @@ function ChatBubble({ message }: { message: MessageLogEntry }) {
             : 'bg-white text-gray-900 rounded-tl-none'
         }`}
       >
-        <p className="whitespace-pre-wrap break-words">{bubbleContent}</p>
+        {mediaUrl && mediaType === 'VIDEO' ? (
+          <video src={mediaUrl} controls className="rounded-md mb-2 max-w-full" style={{ maxHeight: 240 }} />
+        ) : mediaUrl && mediaType === 'IMAGE' ? (
+          <img src={mediaUrl} alt="" className="rounded-md mb-2 max-w-full" style={{ maxHeight: 240 }} />
+        ) : mediaType === 'VIDEO' ? (
+          <div className="flex items-center gap-2 bg-black/10 rounded-md px-3 py-2 mb-2">
+            <Play size={16} className="text-gray-600" />
+            <span className="text-xs text-gray-600">Video message</span>
+          </div>
+        ) : mediaType === 'IMAGE' ? (
+          <div className="flex items-center gap-2 bg-black/10 rounded-md px-3 py-2 mb-2">
+            <Image size={16} className="text-gray-600" />
+            <span className="text-xs text-gray-600">Image message</span>
+          </div>
+        ) : null}
+        <p className="whitespace-pre-wrap break-words">{textContent}</p>
         <div className={`flex items-center gap-1 mt-1 ${isOutbound ? 'justify-end' : ''}`}>
           <span className="text-[10px] text-gray-500">
             {formatTime(message.sentAt || message.createdAt)}
