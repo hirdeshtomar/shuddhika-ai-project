@@ -7,8 +7,10 @@ import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest, ApiResponse } from '../types/index.js';
 import {
   scrapeGoogleMaps,
+  scrapeGoogleMapsDeep,
   getSuggestedSearches,
   getIndianCities,
+  getDeepSearchCities,
 } from '../services/scrapers/googleMaps.js';
 
 const router = Router();
@@ -89,6 +91,7 @@ router.get('/suggestions', authenticate, async (req: AuthenticatedRequest, res: 
     data: {
       searches: getSuggestedSearches(),
       cities: getIndianCities(),
+      deepSearchCities: getDeepSearchCities(),
     },
   });
 });
@@ -108,6 +111,23 @@ router.post('/google-maps', authenticate, async (req: AuthenticatedRequest, res:
     success: true,
     data: result,
     message: `Found ${result.leadsFound} businesses. Added ${result.leadsAdded} new leads. ${result.duplicates} duplicates skipped.`,
+  });
+});
+
+// POST /api/scraper/google-maps-deep - Deep search across multiple areas in a city
+router.post('/google-maps-deep', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
+  if (!env.GOOGLE_MAPS_API_KEY) {
+    throw new AppError('Google Maps API key not configured', 400);
+  }
+
+  const { query, location } = scrapeSchema.parse(req.body);
+
+  const result = await scrapeGoogleMapsDeep(query, location);
+
+  res.json({
+    success: true,
+    data: result,
+    message: `Deep search complete. Found ${result.leadsFound} businesses across multiple areas. Added ${result.leadsAdded} new leads. ${result.duplicates} duplicates skipped.`,
   });
 });
 

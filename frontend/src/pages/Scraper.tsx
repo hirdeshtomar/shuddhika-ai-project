@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, MapPin, Download, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Search, MapPin, Download, AlertCircle, CheckCircle, Clock, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../services/api';
 
@@ -14,6 +14,7 @@ interface ScraperStatus {
 interface Suggestions {
   searches: Array<{ query: string; description: string }>;
   cities: string[];
+  deepSearchCities: string[];
 }
 
 interface ScraperJob {
@@ -67,7 +68,7 @@ export default function Scraper() {
     },
   });
 
-  // Scrape mutation
+  // Regular scrape mutation
   const scrapeMutation = useMutation({
     mutationFn: async () => {
       const { data } = await api.post<{ data: ScrapeResult; message: string }>(
@@ -87,8 +88,32 @@ export default function Scraper() {
     },
   });
 
+  // Deep scrape mutation
+  const deepScrapeMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<{ data: ScrapeResult; message: string }>(
+        '/scraper/google-maps-deep',
+        { query, location }
+      );
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['scraper-jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      toast.success(data.message || 'Deep search completed');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Deep search failed');
+    },
+  });
+
   const isConfigured = statusData?.googleMaps?.configured;
   const jobs = jobsData || [];
+  const isSearching = scrapeMutation.isPending || deepScrapeMutation.isPending;
+  const deepSearchCities = suggestions?.deepSearchCities || [];
+  const canDeepSearch = deepSearchCities.includes(location);
+  const lastResult = scrapeMutation.data || deepScrapeMutation.data;
 
   return (
     <div>
@@ -173,7 +198,11 @@ export default function Scraper() {
                     key={city}
                     type="button"
                     onClick={() => setLocation(city)}
-                    className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-full"
+                    className={`text-xs px-2 py-1 rounded-full ${
+                      deepSearchCities.includes(city)
+                        ? 'bg-primary-100 hover:bg-primary-200 text-primary-700'
+                        : 'bg-gray-100 hover:bg-gray-200'
+                    }`}
                   >
                     {city}
                   </button>
@@ -183,42 +212,74 @@ export default function Scraper() {
           </div>
         </div>
 
-        <button
-          onClick={() => scrapeMutation.mutate()}
-          disabled={!isConfigured || scrapeMutation.isPending || !query || !location}
-          className="btn btn-primary flex items-center gap-2"
-        >
-          {scrapeMutation.isPending ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-              Searching...
-            </>
-          ) : (
-            <>
-              <Download size={18} />
-              Find Leads
-            </>
-          )}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => scrapeMutation.mutate()}
+            disabled={!isConfigured || isSearching || !query || !location}
+            className="btn btn-primary flex items-center gap-2"
+          >
+            {scrapeMutation.isPending ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                Searching...
+              </>
+            ) : (
+              <>
+                <Download size={18} />
+                Find Leads
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={() => deepScrapeMutation.mutate()}
+            disabled={!isConfigured || isSearching || !query || !location || !canDeepSearch}
+            className="btn bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={canDeepSearch ? `Search across multiple areas in ${location}` : `Deep search available for: ${deepSearchCities.join(', ')}`}
+          >
+            {deepScrapeMutation.isPending ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                Deep Searching...
+              </>
+            ) : (
+              <>
+                <Zap size={18} />
+                Deep Search
+              </>
+            )}
+          </button>
+        </div>
 
         {scrapeMutation.isPending && (
           <p className="text-sm text-gray-500 mt-2">
-            This may take 1-2 minutes. Fetching business details from Google Maps...
+            Searching with pagination (up to 60 results)...
+          </p>
+        )}
+        {deepScrapeMutation.isPending && (
+          <p className="text-sm text-gray-500 mt-2">
+            Deep searching across multiple areas in {location}. This may take a few minutes...
+          </p>
+        )}
+
+        {canDeepSearch && !isSearching && (
+          <p className="text-xs text-gray-400 mt-2">
+            Deep Search searches across 10-15 neighborhoods in {location} to find hundreds of leads
           </p>
         )}
       </div>
 
       {/* Results Summary */}
-      {scrapeMutation.data && (
+      {lastResult && (
         <div className="card p-4 mb-6 bg-green-50 border-green-200">
           <div className="flex gap-3">
             <CheckCircle className="text-green-600 flex-shrink-0" size={20} />
             <div>
-              <p className="font-medium text-green-800">Scraping Complete</p>
+              <p className="font-medium text-green-800">Search Complete</p>
               <div className="flex gap-4 mt-2 text-sm text-green-700">
-                <span>Found: {scrapeMutation.data.data.leadsFound}</span>
-                <span>Added: {scrapeMutation.data.data.leadsAdded}</span>
-                <span>Duplicates: {scrapeMutation.data.data.duplicates}</span>
+                <span>Found: {lastResult.data.leadsFound}</span>
+                <span>Added: {lastResult.data.leadsAdded}</span>
+                <span>Duplicates: {lastResult.data.duplicates}</span>
               </div>
             </div>
           </div>
@@ -265,10 +326,11 @@ export default function Scraper() {
       <div className="card p-6 mt-6 bg-blue-50 border-blue-200">
         <h3 className="font-medium text-blue-800 mb-2">Tips for Better Results</h3>
         <ul className="text-sm text-blue-700 space-y-1">
+          <li>• <strong>Find Leads</strong> searches the city and returns up to 60 businesses</li>
+          <li>• <strong>Deep Search</strong> searches across 10-15 neighborhoods to find hundreds of leads</li>
           <li>• Be specific: "wholesale grocery" works better than just "grocery"</li>
-          <li>• Try different cities to build a diverse lead list</li>
+          <li>• Duplicates are automatically skipped — run the same search safely</li>
           <li>• Best targets for mustard oil: grocery stores, restaurants, sweet shops, dhabas</li>
-          <li>• Each search returns up to 60 businesses with verified phone numbers</li>
         </ul>
       </div>
     </div>
