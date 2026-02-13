@@ -4,6 +4,7 @@ import {
   WhatsAppMessageStatus,
   WhatsAppIncomingMessage,
 } from '../../types/index.js';
+import { sendPushNotification } from '../pushNotification.js';
 
 /**
  * Process incoming WhatsApp webhook events
@@ -139,6 +140,16 @@ async function processIncomingMessage(message: WhatsAppIncomingMessage): Promise
   });
 
   console.log(`Received message from lead ${lead.id}: ${text?.body || type}`);
+
+  // Send push notification
+  const senderName = lead.name || lead.phone;
+  const msgPreview = text?.body || `[${type} message]`;
+  sendPushNotification({
+    title: `New message from ${senderName}`,
+    body: msgPreview.length > 100 ? msgPreview.slice(0, 100) + '...' : msgPreview,
+    url: `/conversations?lead=${lead.id}`,
+    tag: `msg-${lead.id}`,
+  }).catch((err) => console.error('Push notification error:', err));
 }
 
 /**

@@ -268,7 +268,10 @@ export async function sendCampaignMessage(
     return { success: false, error: 'Lead has opted out' };
   }
 
-  // Create message log entry
+  // Build header params from template type + provided media URL
+  const mediaUrl = headerMediaUrl || template.headerContent || undefined;
+
+  // Create message log entry with content (including media URL for video/image templates)
   const messageLog = await prisma.messageLog.create({
     data: {
       leadId,
@@ -276,12 +279,10 @@ export async function sendCampaignMessage(
       templateId,
       channel: 'WHATSAPP',
       direction: 'OUTBOUND',
+      content: mediaUrl ? JSON.stringify({ text: template.bodyText, mediaUrl, mediaType: template.headerType }) : template.bodyText,
       status: 'PENDING',
     },
   });
-
-  // Build header params from template type + provided media URL
-  const mediaUrl = headerMediaUrl || template.headerContent || undefined;
   let headerParams: { type: 'text' | 'image' | 'video'; value: string } | undefined;
   if (template.headerType === 'IMAGE' && mediaUrl) {
     headerParams = { type: 'image', value: mediaUrl };

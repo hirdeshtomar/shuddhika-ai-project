@@ -254,4 +254,26 @@ export const conversationsApi = {
   },
 };
 
+// Push Notifications
+export const pushApi = {
+  getVapidKey: async () => {
+    const { data } = await api.get<ApiResponse<{ vapidPublicKey: string | null }>>('/push/vapid-key');
+    return data;
+  },
+
+  subscribe: async (subscription: PushSubscription) => {
+    const sub = subscription.toJSON();
+    const { data } = await api.post<ApiResponse<void>>('/push/subscribe', {
+      endpoint: sub.endpoint,
+      keys: sub.keys,
+    });
+    return data;
+  },
+
+  unsubscribe: async (endpoint: string) => {
+    const { data } = await api.post<ApiResponse<void>>('/push/unsubscribe', { endpoint });
+    return data;
+  },
+};
+
 export default api;

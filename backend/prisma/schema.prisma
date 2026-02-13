@@ -263,6 +263,18 @@ enum MessageStatus {
   FAILED
 }
 
+// Push notification subscriptions
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@map("push_subscriptions")
+}
+
 // Scraper job tracking
 model ScraperJob {
   id         String       @id @default(cuid())

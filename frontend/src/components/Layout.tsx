@@ -9,9 +9,12 @@ import {
   LogOut,
   Menu,
   X,
+  Bell,
+  BellOff,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { pushApi } from '../services/api';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -22,9 +25,80 @@ const navigation = [
   { name: 'Templates', href: '/templates', icon: FileText },
 ];
 
+function useNotifications() {
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Check if already subscribed
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.pushManager.getSubscription().then((sub) => {
+          setEnabled(!!sub);
+        });
+      });
+    }
+  }, []);
+
+  const toggle = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      alert('Push notifications are not supported in this browser.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+
+      if (enabled) {
+        // Unsubscribe
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await pushApi.unsubscribe(sub.endpoint);
+          await sub.unsubscribe();
+        }
+        setEnabled(false);
+      } else {
+        // Get VAPID key and subscribe
+        const { data } = await pushApi.getVapidKey();
+        if (!data?.vapidPublicKey) {
+          alert('Push notifications are not configured on the server.');
+          return;
+        }
+
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return;
+
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(data.vapidPublicKey),
+        });
+        await pushApi.subscribe(sub);
+        setEnabled(true);
+      }
+    } catch (err) {
+      console.error('Notification toggle error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { enabled, loading, toggle };
+}
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
+  const notifications = useNotifications();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -91,13 +165,27 @@ export default function Layout() {
               <p className="text-xs text-gray-500 truncate">{user?.email}</p>
             </div>
           </div>
-          <button
-            onClick={logout}
-            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <LogOut size={18} />
-            Logout
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={notifications.toggle}
+              disabled={notifications.loading}
+              className={`flex items-center gap-2 flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
+                notifications.enabled
+                  ? 'text-primary-700 bg-primary-50 hover:bg-primary-100'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+              title={notifications.enabled ? 'Disable notifications' : 'Enable notifications'}
+            >
+              {notifications.enabled ? <Bell size={18} /> : <BellOff size={18} />}
+              {notifications.enabled ? 'Alerts on' : 'Alerts off'}
+            </button>
+            <button
+              onClick={logout}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
         </div>
       </div>
 
