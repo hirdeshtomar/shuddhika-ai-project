@@ -47,8 +47,8 @@ export default function Conversations() {
 
   // Send template message
   const sendTemplateMutation = useMutation({
-    mutationFn: (templateId: string) =>
-      conversationsApi.sendTemplate(selectedLeadId!, templateId),
+    mutationFn: ({ templateId, headerMediaUrl }: { templateId: string; headerMediaUrl?: string }) =>
+      conversationsApi.sendTemplate(selectedLeadId!, templateId, [], headerMediaUrl),
     onSuccess: () => {
       setShowTemplateModal(false);
       queryClient.invalidateQueries({ queryKey: ['conversation-messages', selectedLeadId] });
@@ -243,7 +243,7 @@ export default function Conversations() {
       {/* Template Selector Modal */}
       {showTemplateModal && selectedLeadId && (
         <TemplateModal
-          onSelect={(templateId) => sendTemplateMutation.mutate(templateId)}
+          onSelect={(templateId, headerMediaUrl) => sendTemplateMutation.mutate({ templateId, headerMediaUrl })}
           onClose={() => setShowTemplateModal(false)}
           isSending={sendTemplateMutation.isPending}
         />
@@ -323,10 +323,13 @@ function TemplateModal({
   onClose,
   isSending,
 }: {
-  onSelect: (templateId: string) => void;
+  onSelect: (templateId: string, headerMediaUrl?: string) => void;
   onClose: () => void;
   isSending: boolean;
 }) {
+  const [selectedTemplate, setSelectedTemplate] = useState<MessageTemplate | null>(null);
+  const [mediaUrl, setMediaUrl] = useState('');
+
   const { data, isLoading } = useQuery({
     queryKey: ['templates'],
     queryFn: () => templatesApi.list(),
@@ -336,11 +339,20 @@ function TemplateModal({
     (t) => t.status === 'APPROVED'
   );
 
+  const needsMedia = selectedTemplate?.headerType === 'IMAGE' || selectedTemplate?.headerType === 'VIDEO';
+
+  const handleSend = () => {
+    if (!selectedTemplate) return;
+    onSelect(selectedTemplate.id, needsMedia ? mediaUrl || undefined : undefined);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[70vh] flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h3 className="font-semibold text-gray-900">Send Template</h3>
+          <h3 className="font-semibold text-gray-900">
+            {selectedTemplate ? 'Confirm & Send' : 'Send Template'}
+          </h3>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
             <X size={20} />
           </button>
@@ -351,6 +363,44 @@ function TemplateModal({
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
             </div>
+          ) : selectedTemplate ? (
+            <div className="space-y-3">
+              <div className="p-3 rounded-lg border bg-gray-50">
+                <p className="font-medium text-sm text-gray-900">{selectedTemplate.name}</p>
+                <p className="text-xs text-gray-500 mt-1">{selectedTemplate.bodyText || selectedTemplate.content}</p>
+              </div>
+
+              {needsMedia && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {selectedTemplate.headerType === 'VIDEO' ? 'Video' : 'Image'} URL (required)
+                  </label>
+                  <input
+                    type="url"
+                    placeholder={`https://example.com/media.${selectedTemplate.headerType === 'VIDEO' ? 'mp4' : 'jpg'}`}
+                    className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    value={mediaUrl}
+                    onChange={(e) => setMediaUrl(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setSelectedTemplate(null); setMediaUrl(''); }}
+                  className="flex-1 px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleSend}
+                  disabled={isSending || (needsMedia && !mediaUrl)}
+                  className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {isSending ? 'Sending...' : 'Send'}
+                </button>
+              </div>
+            </div>
           ) : templates.length === 0 ? (
             <p className="text-center text-gray-500 py-8 text-sm">
               No approved templates available
@@ -360,9 +410,8 @@ function TemplateModal({
               {templates.map((template) => (
                 <button
                   key={template.id}
-                  onClick={() => onSelect(template.id)}
-                  disabled={isSending}
-                  className="w-full text-left p-3 rounded-lg border hover:border-primary-300 hover:bg-primary-50 transition-colors disabled:opacity-50"
+                  onClick={() => setSelectedTemplate(template)}
+                  className="w-full text-left p-3 rounded-lg border hover:border-primary-300 hover:bg-primary-50 transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <p className="font-medium text-sm text-gray-900">{template.name}</p>
@@ -371,9 +420,16 @@ function TemplateModal({
                   <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                     {template.bodyText || template.content}
                   </p>
-                  <span className="inline-block mt-1 text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                    {template.category}
-                  </span>
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                      {template.category}
+                    </span>
+                    {(template.headerType === 'VIDEO' || template.headerType === 'IMAGE') && (
+                      <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded">
+                        {template.headerType}
+                      </span>
+                    )}
+                  </div>
                 </button>
               ))}
             </div>

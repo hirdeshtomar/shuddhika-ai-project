@@ -244,10 +244,11 @@ export const conversationsApi = {
     return data;
   },
 
-  sendTemplate: async (leadId: string, templateId: string, bodyParams: string[] = []) => {
+  sendTemplate: async (leadId: string, templateId: string, bodyParams: string[] = [], headerMediaUrl?: string) => {
     const { data } = await api.post<ApiResponse<MessageLogEntry>>(`/conversations/${leadId}/send-template`, {
       templateId,
       bodyParams,
+      ...(headerMediaUrl ? { headerMediaUrl } : {}),
     });
     return data;
   },
