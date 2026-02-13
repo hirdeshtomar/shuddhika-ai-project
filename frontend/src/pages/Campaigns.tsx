@@ -212,6 +212,7 @@ function CreateCampaignModal({
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
   const [leadSearch, setLeadSearch] = useState('');
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
+  const [skipDuplicate, setSkipDuplicate] = useState(true);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -259,6 +260,7 @@ function CreateCampaignModal({
       name: formData.name,
       description: formData.description,
       templateId: formData.templateId,
+      skipDuplicateTemplate: skipDuplicate,
     };
     if (needsMediaUrl && headerMediaUrl.trim()) {
       payload.headerMediaUrl = headerMediaUrl.trim();
@@ -524,6 +526,24 @@ function CreateCampaignModal({
               </p>
             </div>
           )}
+
+          {/* Skip duplicate template */}
+          <label className="flex items-start gap-3 p-3 rounded-lg border bg-gray-50 cursor-pointer hover:bg-gray-100">
+            <input
+              type="checkbox"
+              className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              checked={skipDuplicate}
+              onChange={(e) => setSkipDuplicate(e.target.checked)}
+            />
+            <div>
+              <p className="text-sm font-medium text-gray-900">
+                Skip leads who already received this template
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Avoids sending the same message twice. Turn off if you want to resend to everyone.
+              </p>
+            </div>
+          </label>
 
           <div className="flex justify-end gap-2 pt-4">
             <button type="button" onClick={onClose} className="btn btn-secondary">

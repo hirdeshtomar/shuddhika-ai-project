@@ -63,6 +63,7 @@ export interface CreateCampaignInput {
   templateId: string;
   leadIds?: string[];
   headerMediaUrl?: string;
+  skipDuplicateTemplate?: boolean;
   targetFilters?: {
     status?: string[];
     source?: string[];

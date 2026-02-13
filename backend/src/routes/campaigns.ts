@@ -16,6 +16,7 @@ const createCampaignSchema = z.object({
   templateId: z.string().min(1, 'Template ID is required'),
   leadIds: z.array(z.string()).optional(),
   headerMediaUrl: z.string().url().optional(),
+  skipDuplicateTemplate: z.boolean().default(true),
   targetFilters: z.object({
     status: z.array(z.string()).optional(),
     source: z.array(z.string()).optional(),
@@ -201,6 +202,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response<A
       targetFilters: {
         ...(data.leadIds?.length ? { leadIds: data.leadIds } : data.targetFilters),
         ...(data.headerMediaUrl ? { headerMediaUrl: data.headerMediaUrl } : {}),
+        skipDuplicateTemplate: data.skipDuplicateTemplate !== false,
       },
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
       status: data.scheduledAt ? 'SCHEDULED' : 'DRAFT',
@@ -242,6 +244,21 @@ router.post('/:id/start', authenticate, async (req: AuthenticatedRequest, res: R
   const targetFilters = campaign.targetFilters as any || {};
   let leads: { id: string }[];
 
+  // Find leads who already received this template successfully (for dedup)
+  let alreadyReceivedIds: Set<string> = new Set();
+  if (targetFilters.skipDuplicateTemplate !== false) {
+    const alreadyReceived = await prisma.messageLog.findMany({
+      where: {
+        templateId: campaign.templateId,
+        direction: 'OUTBOUND',
+        status: { notIn: ['FAILED'] },
+      },
+      select: { leadId: true },
+      distinct: ['leadId'],
+    });
+    alreadyReceivedIds = new Set(alreadyReceived.map(m => m.leadId));
+  }
+
   if (targetFilters.leadIds?.length) {
     // Specific leads were selected at creation
     leads = await prisma.lead.findMany({
@@ -276,6 +293,15 @@ router.post('/:id/start', authenticate, async (req: AuthenticatedRequest, res: R
       where: leadWhere,
       select: { id: true },
     });
+  }
+
+  // Remove leads who already received this template
+  if (alreadyReceivedIds.size > 0) {
+    const before = leads.length;
+    leads = leads.filter(l => !alreadyReceivedIds.has(l.id));
+    if (before !== leads.length) {
+      console.log(`[Campaign ${campaign.id}] Skipped ${before - leads.length} leads who already received this template`);
+    }
   }
 
   if (leads.length === 0) {
