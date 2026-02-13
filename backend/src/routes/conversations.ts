@@ -15,6 +15,7 @@ const sendTextSchema = z.object({
 const sendTemplateSchema = z.object({
   templateId: z.string().min(1, 'Template ID is required'),
   bodyParams: z.array(z.string()).default([]),
+  headerMediaUrl: z.string().url().optional(),
 });
 
 // GET /api/conversations - List leads with their latest message
@@ -218,7 +219,7 @@ router.post('/:leadId/send-text', authenticate, async (req: AuthenticatedRequest
 // POST /api/conversations/:leadId/send-template - Send a template message to a lead
 router.post('/:leadId/send-template', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
   const leadId = req.params.leadId!;
-  const { templateId, bodyParams } = sendTemplateSchema.parse(req.body);
+  const { templateId, bodyParams, headerMediaUrl } = sendTemplateSchema.parse(req.body);
 
   const [lead, template] = await Promise.all([
     prisma.lead.findUnique({ where: { id: leadId } }),
@@ -242,7 +243,16 @@ router.post('/:leadId/send-template', authenticate, async (req: AuthenticatedReq
     },
   });
 
-  const components = whatsappClient.buildTemplateComponents(bodyParams);
+  // Build header params for templates with IMAGE/VIDEO headers
+  const mediaUrl = headerMediaUrl || template.headerContent || undefined;
+  let headerParams: { type: 'text' | 'image' | 'video'; value: string } | undefined;
+  if (template.headerType === 'IMAGE' && mediaUrl) {
+    headerParams = { type: 'image', value: mediaUrl };
+  } else if (template.headerType === 'VIDEO' && mediaUrl) {
+    headerParams = { type: 'video', value: mediaUrl };
+  }
+
+  const components = whatsappClient.buildTemplateComponents(bodyParams, headerParams);
   const result = await whatsappClient.sendTemplateMessage({
     to: lead.phone,
     templateName: template.whatsappTemplateName,
