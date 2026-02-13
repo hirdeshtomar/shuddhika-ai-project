@@ -569,6 +569,12 @@ async function processCampaignMessages(
       } else {
         failed++;
         console.log(`[Campaign ${campaignId}] Failed for lead ${leadId}: ${result.error}`);
+
+        // If throttled by Meta (131049), wait extra time before next message
+        if (result.error?.includes('131049')) {
+          console.log(`[Campaign ${campaignId}] Throttled — waiting 10s before next message`);
+          await new Promise(resolve => setTimeout(resolve, 10000));
+        }
       }
 
       // Update campaign counters periodically (every message)
@@ -589,8 +595,8 @@ async function processCampaignMessages(
       });
     }
 
-    // Rate limit: wait 1 second between messages to avoid WhatsApp throttling
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Rate limit: wait 3 seconds between messages to avoid WhatsApp throttling
+    await new Promise(resolve => setTimeout(resolve, 3000));
   }
 
   // Mark campaign as completed if it's still running
