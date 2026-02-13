@@ -565,8 +565,10 @@ async function processCampaignMessages(
 ): Promise<void> {
   console.log(`[Campaign ${campaignId}] Starting to send ${leadIds.length} messages`);
   let sent = 0;
-  let delivered = 0;
   let failed = 0;
+  let throttleBackoff = 0; // escalating backoff for consecutive 131049 errors
+  const BASE_DELAY = 5000; // 5s between messages (WhatsApp-safe)
+  const MAX_RETRIES = 2; // retry throttled messages up to 2 times
 
   for (const leadId of leadIds) {
     // Check if campaign is still running (allows pause/cancel)
@@ -581,7 +583,26 @@ async function processCampaignMessages(
     }
 
     try {
-      const result = await sendCampaignMessage(leadId, campaignId, templateId, [], headerMediaUrl);
+      let result: { success: boolean; messageId?: string; error?: string; errorCode?: number } | undefined;
+      let attempts = 0;
+
+      // Retry loop for throttled (131049) messages
+      while (attempts <= MAX_RETRIES) {
+        result = await sendCampaignMessage(leadId, campaignId, templateId, [], headerMediaUrl);
+
+        if (result.success || result.errorCode !== 131049) {
+          break; // success or non-throttle error — don't retry
+        }
+
+        // 131049 throttle — exponential backoff then retry
+        attempts++;
+        throttleBackoff = Math.min(throttleBackoff + 1, 5);
+        const waitTime = 15000 * throttleBackoff; // 15s, 30s, 45s, 60s, 75s
+        console.log(`[Campaign ${campaignId}] Throttled (131049) for lead ${leadId} — retry ${attempts}/${MAX_RETRIES} after ${waitTime / 1000}s`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+
+      if (!result) continue;
 
       // Update campaign-lead status
       const newStatus = result.success ? 'SENT' : 'FAILED';
@@ -592,18 +613,13 @@ async function processCampaignMessages(
 
       if (result.success) {
         sent++;
+        throttleBackoff = Math.max(0, throttleBackoff - 1); // cool down on success
       } else {
         failed++;
-        console.log(`[Campaign ${campaignId}] Failed for lead ${leadId}: ${result.error}`);
-
-        // If throttled by Meta (131049), wait extra time before next message
-        if (result.error?.includes('131049')) {
-          console.log(`[Campaign ${campaignId}] Throttled — waiting 10s before next message`);
-          await new Promise(resolve => setTimeout(resolve, 10000));
-        }
+        console.log(`[Campaign ${campaignId}] Failed for lead ${leadId}: [${result.errorCode}] ${result.error}`);
       }
 
-      // Update campaign counters periodically (every message)
+      // Update campaign counters
       await prisma.campaign.update({
         where: { id: campaignId },
         data: {
@@ -621,8 +637,9 @@ async function processCampaignMessages(
       });
     }
 
-    // Rate limit: wait 3 seconds between messages to avoid WhatsApp throttling
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Rate limit: 5s base + random jitter (0-2s) to appear natural
+    const jitter = Math.floor(Math.random() * 2000);
+    await new Promise(resolve => setTimeout(resolve, BASE_DELAY + jitter));
   }
 
   // Mark campaign as completed if it's still running

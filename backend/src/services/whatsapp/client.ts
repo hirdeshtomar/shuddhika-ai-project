@@ -26,6 +26,7 @@ export class WhatsAppClient {
     messageId: string;
     success: boolean;
     error?: string;
+    errorCode?: number;
   }> {
     try {
       const payload = {
@@ -54,19 +55,23 @@ export class WhatsAppClient {
         success: true,
       };
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error?.message ||
+      const waError = error.response?.data?.error;
+      const errorCode = waError?.code;
+      const errorMessage = waError?.message ||
         error.message ||
         'Unknown error sending WhatsApp message';
 
       console.error('WhatsApp API Error:', {
         status: error.response?.status,
-        data: error.response?.data,
+        code: errorCode,
+        message: errorMessage,
       });
 
       return {
         messageId: '',
         success: false,
         error: errorMessage,
+        errorCode,
       };
     }
   }
@@ -249,7 +254,7 @@ export async function sendCampaignMessage(
   templateId: string,
   bodyParams: string[],
   headerMediaUrl?: string
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
+): Promise<{ success: boolean; messageId?: string; error?: string; errorCode?: number }> {
   // Get lead and template
   const [lead, template] = await Promise.all([
     prisma.lead.findUnique({ where: { id: leadId } }),
@@ -324,11 +329,21 @@ export async function sendCampaignMessage(
         errorMessage: result.error,
       },
     });
+
+    // 131026 = number not on WhatsApp — mark lead so future campaigns skip them
+    if (result.errorCode === 131026) {
+      await prisma.lead.update({
+        where: { id: leadId },
+        data: { status: 'DO_NOT_CONTACT', notes: 'Phone number not on WhatsApp (131026)' },
+      });
+      console.log(`[Campaign] Lead ${leadId} marked DO_NOT_CONTACT — not on WhatsApp`);
+    }
   }
 
   return {
     success: result.success,
     messageId: result.messageId,
     error: result.error,
+    errorCode: result.errorCode,
   };
 }
