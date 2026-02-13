@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, ArrowLeft, Send, Clock, Check, CheckCheck, AlertCircle,
-  FileText, X, User, Play, Image,
+  FileText, X, User, Play, Image, Trash2,
 } from 'lucide-react';
 import { conversationsApi, templatesApi } from '../services/api';
 import type { Conversation, MessageLogEntry, MessageStatus, MessageTemplate } from '../types';
@@ -13,6 +13,7 @@ export default function Conversations() {
   const [searchQuery, setSearchQuery] = useState('');
   const [messageText, setMessageText] = useState('');
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Contact list — disable auto-refetch during active search
@@ -42,6 +43,16 @@ export default function Conversations() {
       setMessageText('');
       queryClient.invalidateQueries({ queryKey: ['conversation-messages', selectedLeadId] });
       queryClient.invalidateQueries({ queryKey: ['conversations', searchQuery], exact: true });
+    },
+  });
+
+  // Delete conversation
+  const deleteMutation = useMutation({
+    mutationFn: () => conversationsApi.delete(selectedLeadId!),
+    onSuccess: () => {
+      setShowDeleteConfirm(false);
+      setSelectedLeadId(null);
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
 
@@ -174,6 +185,13 @@ export default function Conversations() {
                   {lead?.city && ` · ${lead.city}`}
                 </p>
               </div>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                title="Delete conversation"
+              >
+                <Trash2 size={18} />
+              </button>
             </div>
 
             {/* Messages Area */}
@@ -239,6 +257,40 @@ export default function Conversations() {
           </>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && selectedLeadId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="font-semibold text-gray-900 text-lg">Delete conversation?</h3>
+            <p className="text-sm text-gray-500 mt-2">
+              This will permanently delete all messages with{' '}
+              <span className="font-medium text-gray-700">{lead?.name || 'this contact'}</span>.
+              This action cannot be undone.
+            </p>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+                className="flex-1 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+            {deleteMutation.isError && (
+              <p className="text-xs text-red-500 mt-2 text-center">
+                Failed to delete. Please try again.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Template Selector Modal */}
       {showTemplateModal && selectedLeadId && (

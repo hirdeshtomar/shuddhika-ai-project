@@ -294,4 +294,25 @@ router.post('/:leadId/send-template', authenticate, async (req: AuthenticatedReq
   }
 });
 
+// DELETE /api/conversations/:leadId - Delete all messages for a lead
+router.delete('/:leadId', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
+  const leadId = req.params.leadId;
+
+  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+
+  if (!lead) {
+    throw new AppError('Lead not found', 404);
+  }
+
+  const { count } = await prisma.messageLog.deleteMany({
+    where: { leadId },
+  });
+
+  res.json({
+    success: true,
+    data: { deletedCount: count },
+    message: `Deleted ${count} messages`,
+  });
+});
+
 export default router;

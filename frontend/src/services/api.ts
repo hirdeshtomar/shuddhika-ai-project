@@ -252,6 +252,11 @@ export const conversationsApi = {
     });
     return data;
   },
+
+  delete: async (leadId: string) => {
+    const { data } = await api.delete<ApiResponse<{ deletedCount: number }>>(`/conversations/${leadId}`);
+    return data;
+  },
 };
 
 // Push Notifications
