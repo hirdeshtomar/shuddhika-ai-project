@@ -1,11 +1,35 @@
-import { useState, useRef, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, ArrowLeft, Send, Clock, Check, CheckCheck, AlertCircle,
-  FileText, X, User, Play, Image, Trash2,
+  FileText, X, User, Play, Image, Trash2, ChevronDown,
 } from 'lucide-react';
 import { conversationsApi, templatesApi } from '../services/api';
 import type { Conversation, MessageLogEntry, MessageStatus, MessageTemplate } from '../types';
+
+/* ─── Unread tracking via localStorage ─── */
+
+const LAST_READ_KEY = 'shuddhika_conversation_last_read';
+
+function getLastRead(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_READ_KEY) || '{}');
+  } catch { return {}; }
+}
+
+function markAsRead(leadId: string) {
+  const map = getLastRead();
+  map[leadId] = new Date().toISOString();
+  localStorage.setItem(LAST_READ_KEY, JSON.stringify(map));
+}
+
+function isUnread(conv: Conversation): boolean {
+  if (!conv.lastMessage) return false;
+  if (conv.lastMessage.direction !== 'INBOUND') return false;
+  const lastRead = getLastRead()[conv.leadId];
+  if (!lastRead) return true;
+  return new Date(conv.lastMessage.createdAt).getTime() > new Date(lastRead).getTime();
+}
 
 export default function Conversations() {
   const queryClient = useQueryClient();
@@ -14,16 +38,47 @@ export default function Conversations() {
   const [messageText, setMessageText] = useState('');
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ leadId: string; name: string } | null>(null);
+  const [lastReadSnapshot, setLastReadSnapshot] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  // Contact list — disable auto-refetch during active search
-  const { data: contactsData, isLoading: contactsLoading } = useQuery({
+  // Contact list with infinite scroll
+  const {
+    data: contactsData,
+    isLoading: contactsLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['conversations', searchQuery],
-    queryFn: () => conversationsApi.list({ search: searchQuery || undefined }),
+    queryFn: ({ pageParam }) =>
+      conversationsApi.list({ search: searchQuery || undefined, page: pageParam, limit: 30 }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const p = lastPage.pagination;
+      if (!p || p.page >= p.totalPages) return undefined;
+      return p.page + 1;
+    },
     refetchInterval: searchQuery ? false : 10000,
   });
 
-  const conversations: Conversation[] = contactsData?.data || [];
+  const conversations: Conversation[] = contactsData?.pages.flatMap((p) => p.data || []) || [];
+
+  // IntersectionObserver to trigger loading next page
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Messages for selected lead
   const { data: messagesData, isError: messagesError } = useQuery({
@@ -42,7 +97,7 @@ export default function Conversations() {
     onSuccess: () => {
       setMessageText('');
       queryClient.invalidateQueries({ queryKey: ['conversation-messages', selectedLeadId] });
-      queryClient.invalidateQueries({ queryKey: ['conversations', searchQuery], exact: true });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
 
@@ -63,7 +118,7 @@ export default function Conversations() {
     onSuccess: () => {
       setShowTemplateModal(false);
       queryClient.invalidateQueries({ queryKey: ['conversation-messages', selectedLeadId] });
-      queryClient.invalidateQueries({ queryKey: ['conversations', searchQuery], exact: true });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
 
@@ -79,10 +134,32 @@ export default function Conversations() {
     sendTextMutation.mutate(trimmed);
   };
 
-  const selectContact = (leadId: string) => {
+  const selectContact = useCallback((leadId: string) => {
+    // Snapshot the last-read time BEFORE marking as read (so we can show the divider)
+    const lastRead = getLastRead();
+    setLastReadSnapshot(lastRead[leadId] || null);
+    // Mark as read
+    markAsRead(leadId);
     setSelectedLeadId(leadId);
     setMessageText('');
-  };
+  }, []);
+
+  // Find the index to insert "NEW MESSAGES" divider
+  const newMessagesDividerIndex = (() => {
+    if (!lastReadSnapshot || messages.length === 0) return -1;
+    const lastReadTime = new Date(lastReadSnapshot).getTime();
+    // Find first INBOUND message after lastReadTime
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (
+        msg.direction === 'INBOUND' &&
+        new Date(msg.createdAt).getTime() > lastReadTime
+      ) {
+        return i;
+      }
+    }
+    return -1;
+  })();
 
   return (
     <div className="h-[calc(100vh-7rem)] -m-6 flex bg-gray-100 overflow-hidden">
@@ -117,49 +194,75 @@ export default function Conversations() {
               {searchQuery ? 'No contacts found' : 'No conversations yet'}
             </div>
           ) : (
-            conversations.map((conv) => (
-              <div
-                key={conv.leadId}
-                className={`group w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 transition-colors ${
-                  selectedLeadId === conv.leadId ? 'bg-primary-50' : ''
-                }`}
-              >
-                <button
-                  onClick={() => selectContact(conv.leadId)}
-                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                >
-                  <Avatar name={conv.name} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium text-gray-900 text-sm truncate">{conv.name}</p>
-                      {conv.lastMessage && (
-                        <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
-                          {formatTime(conv.lastMessage.createdAt)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {conv.lastMessage?.direction === 'OUTBOUND' && (
-                        <StatusTick status={conv.lastMessage.status} size={12} />
-                      )}
-                      <p className="text-xs text-gray-500 truncate">
-                        {parsePreview(conv.lastMessage?.content)}
-                      </p>
-                    </div>
+            <>
+              {conversations.map((conv) => {
+                const unread = isUnread(conv);
+                return (
+                  <div
+                    key={conv.leadId}
+                    className={`group w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 transition-colors ${
+                      selectedLeadId === conv.leadId ? 'bg-primary-50' : ''
+                    }`}
+                  >
+                    <button
+                      onClick={() => selectContact(conv.leadId)}
+                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    >
+                      <Avatar name={conv.name} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className={`text-sm truncate ${unread ? 'font-bold text-gray-900' : 'font-medium text-gray-900'}`}>
+                            {conv.name}
+                          </p>
+                          {conv.lastMessage && (
+                            <span className={`text-xs flex-shrink-0 ml-2 ${unread ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                              {formatTime(conv.lastMessage.createdAt)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {conv.lastMessage?.direction === 'OUTBOUND' && (
+                            <StatusTick status={conv.lastMessage.status} size={12} />
+                          )}
+                          <p className={`text-xs truncate ${unread ? 'text-gray-800 font-medium' : 'text-gray-500'}`}>
+                            {parsePreview(conv.lastMessage?.content)}
+                          </p>
+                          {unread && (
+                            <span className="ml-auto flex-shrink-0 w-2.5 h-2.5 bg-green-500 rounded-full" />
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget({ leadId: conv.leadId, name: conv.name });
+                      }}
+                      className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                      title="Delete conversation"
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </div>
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteTarget({ leadId: conv.leadId, name: conv.name });
-                  }}
-                  className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                  title="Delete conversation"
-                >
-                  <Trash2 size={15} />
-                </button>
+                );
+              })}
+
+              {/* Infinite scroll sentinel */}
+              <div ref={loadMoreRef} className="py-3 flex justify-center">
+                {isFetchingNextPage ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600" />
+                ) : hasNextPage ? (
+                  <button
+                    onClick={() => fetchNextPage()}
+                    className="text-xs text-primary-600 hover:underline flex items-center gap-1"
+                  >
+                    <ChevronDown size={14} /> Load more
+                  </button>
+                ) : conversations.length > 0 ? (
+                  <span className="text-xs text-gray-400">All conversations loaded</span>
+                ) : null}
               </div>
-            ))
+            </>
           )}
         </div>
       </div>
@@ -223,8 +326,22 @@ export default function Conversations() {
                   </p>
                 </div>
               ) : (
-                messages.map((msg) => (
-                  <ChatBubble key={msg.id} message={msg} />
+                messages.map((msg, idx) => (
+                  <div key={msg.id}>
+                    {idx === newMessagesDividerIndex && (
+                      <div className="flex items-center gap-3 py-2 my-1">
+                        <div className="flex-1 h-px bg-[#f9a825]" />
+                        <span className="text-xs font-medium text-[#f9a825] bg-white/90 px-3 py-1 rounded-full shadow-sm uppercase tracking-wide">
+                          New Messages
+                        </span>
+                        <div className="flex-1 h-px bg-[#f9a825]" />
+                      </div>
+                    )}
+                    <ChatBubble
+                      message={msg}
+                      isNew={newMessagesDividerIndex >= 0 && idx >= newMessagesDividerIndex && msg.direction === 'INBOUND'}
+                    />
+                  </div>
                 ))
               )}
               <div ref={messagesEndRef} />
@@ -335,7 +452,7 @@ function Avatar({ name }: { name: string }) {
   );
 }
 
-function ChatBubble({ message }: { message: MessageLogEntry }) {
+function ChatBubble({ message, isNew }: { message: MessageLogEntry; isNew?: boolean }) {
   const isOutbound = message.direction === 'OUTBOUND';
 
   // Parse content that may contain JSON with media info
@@ -365,7 +482,9 @@ function ChatBubble({ message }: { message: MessageLogEntry }) {
         className={`max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-sm ${
           isOutbound
             ? 'bg-[#dcf8c6] text-gray-900 rounded-tr-none'
-            : 'bg-white text-gray-900 rounded-tl-none'
+            : isNew
+              ? 'bg-[#f0f9e8] text-gray-900 rounded-tl-none ring-1 ring-green-200'
+              : 'bg-white text-gray-900 rounded-tl-none'
         }`}
       >
         {mediaUrl && mediaType === 'VIDEO' ? (

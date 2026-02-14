@@ -18,8 +18,10 @@ const sendTemplateSchema = z.object({
   headerMediaUrl: z.string().url().optional(),
 });
 
-// GET /api/conversations - List leads with their latest message
+// GET /api/conversations - List leads with their latest message (paginated, sorted by latest message)
 router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 30));
   const search = req.query.search as string | undefined;
 
   const where: any = {
@@ -34,8 +36,8 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<Ap
     ];
   }
 
-  // Fetch all leads with messages (no pagination — contact list is small for a CRM)
-  const leads = await prisma.lead.findMany({
+  // Fetch all matching leads, sort by latest message, then paginate
+  const allLeads = await prisma.lead.findMany({
     where,
     select: {
       id: true,
@@ -58,9 +60,9 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<Ap
       },
     },
   });
-  const total = leads.length;
 
-  const conversations = leads
+  // Sort all by latest message timestamp, then paginate
+  const sorted = allLeads
     .map((lead) => ({
       leadId: lead.id,
       name: lead.name,
@@ -76,10 +78,13 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<Ap
       return bTime - aTime;
     });
 
+  const total = sorted.length;
+  const conversations = sorted.slice((page - 1) * limit, page * limit);
+
   res.json({
     success: true,
     data: conversations,
-    pagination: { page: 1, limit: total, total, totalPages: 1 },
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   });
 });
 
