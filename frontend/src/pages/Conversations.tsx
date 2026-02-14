@@ -13,7 +13,7 @@ export default function Conversations() {
   const [searchQuery, setSearchQuery] = useState('');
   const [messageText, setMessageText] = useState('');
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ leadId: string; name: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Contact list — disable auto-refetch during active search
@@ -48,10 +48,10 @@ export default function Conversations() {
 
   // Delete conversation
   const deleteMutation = useMutation({
-    mutationFn: () => conversationsApi.delete(selectedLeadId!),
-    onSuccess: () => {
-      setShowDeleteConfirm(false);
-      setSelectedLeadId(null);
+    mutationFn: (leadId: string) => conversationsApi.delete(leadId),
+    onSuccess: (_data, deletedLeadId) => {
+      if (selectedLeadId === deletedLeadId) setSelectedLeadId(null);
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
@@ -118,33 +118,47 @@ export default function Conversations() {
             </div>
           ) : (
             conversations.map((conv) => (
-              <button
+              <div
                 key={conv.leadId}
-                onClick={() => selectContact(conv.leadId)}
-                className={`w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 transition-colors text-left ${
+                className={`group w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 transition-colors ${
                   selectedLeadId === conv.leadId ? 'bg-primary-50' : ''
                 }`}
               >
-                <Avatar name={conv.name} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-gray-900 text-sm truncate">{conv.name}</p>
-                    {conv.lastMessage && (
-                      <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
-                        {formatTime(conv.lastMessage.createdAt)}
-                      </span>
-                    )}
+                <button
+                  onClick={() => selectContact(conv.leadId)}
+                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                >
+                  <Avatar name={conv.name} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-gray-900 text-sm truncate">{conv.name}</p>
+                      {conv.lastMessage && (
+                        <span className="text-xs text-gray-400 flex-shrink-0 ml-2">
+                          {formatTime(conv.lastMessage.createdAt)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      {conv.lastMessage?.direction === 'OUTBOUND' && (
+                        <StatusTick status={conv.lastMessage.status} size={12} />
+                      )}
+                      <p className="text-xs text-gray-500 truncate">
+                        {conv.lastMessage?.content || 'Template message'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    {conv.lastMessage?.direction === 'OUTBOUND' && (
-                      <StatusTick status={conv.lastMessage.status} size={12} />
-                    )}
-                    <p className="text-xs text-gray-500 truncate">
-                      {conv.lastMessage?.content || 'Template message'}
-                    </p>
-                  </div>
-                </div>
-              </button>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget({ leadId: conv.leadId, name: conv.name });
+                  }}
+                  className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                  title="Delete conversation"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
             ))
           )}
         </div>
@@ -186,7 +200,7 @@ export default function Conversations() {
                 </p>
               </div>
               <button
-                onClick={() => setShowDeleteConfirm(true)}
+                onClick={() => setDeleteTarget({ leadId: selectedLeadId!, name: lead?.name || 'this contact' })}
                 className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                 title="Delete conversation"
               >
@@ -259,24 +273,24 @@ export default function Conversations() {
       </div>
 
       {/* Delete Confirmation Dialog */}
-      {showDeleteConfirm && selectedLeadId && (
+      {deleteTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
             <h3 className="font-semibold text-gray-900 text-lg">Delete conversation?</h3>
             <p className="text-sm text-gray-500 mt-2">
               This will permanently delete all messages with{' '}
-              <span className="font-medium text-gray-700">{lead?.name || 'this contact'}</span>.
+              <span className="font-medium text-gray-700">{deleteTarget.name}</span>.
               This action cannot be undone.
             </p>
             <div className="flex gap-3 mt-5">
               <button
-                onClick={() => setShowDeleteConfirm(false)}
+                onClick={() => setDeleteTarget(null)}
                 className="flex-1 px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
-                onClick={() => deleteMutation.mutate()}
+                onClick={() => deleteMutation.mutate(deleteTarget.leadId)}
                 disabled={deleteMutation.isPending}
                 className="flex-1 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
