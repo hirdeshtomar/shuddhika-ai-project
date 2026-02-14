@@ -273,6 +273,21 @@ export async function sendCampaignMessage(
     return { success: false, error: 'Lead has opted out' };
   }
 
+  // Auto-fill body params from lead data when none provided
+  if (bodyParams.length === 0 && template.bodyText) {
+    const varCount = (template.bodyText.match(/\{\{\d+\}\}/g) || []).length;
+    if (varCount > 0) {
+      // Map variable positions to lead fields: {{1}}=name, {{2}}=businessName, {{3}}=city, {{4}}=phone
+      const leadFields = [
+        lead.name || lead.businessName || 'there',
+        lead.businessName || lead.name || '',
+        lead.city || '',
+        lead.phone || '',
+      ];
+      bodyParams = leadFields.slice(0, varCount);
+    }
+  }
+
   // Build header params from template type + provided media URL
   const mediaUrl = headerMediaUrl || template.headerContent || undefined;
 

@@ -6,6 +6,14 @@ import toast from 'react-hot-toast';
 import { campaignsApi, templatesApi, leadsApi } from '../services/api';
 import type { CampaignStatus, MessageTemplate, Lead } from '../types';
 
+const SAVED_MEDIA = [
+  {
+    label: 'Shuddhika Yellow Mustard Oil Video',
+    url: 'https://bewnoeqjndeeirjxncrl.supabase.co/storage/v1/object/public/shuddhika-test/%20Shuddhika%20Pure%20Yellow%20Mustard%20Oil.mp4',
+    type: 'video' as const,
+  },
+];
+
 export default function Campaigns() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -211,7 +219,7 @@ function CreateCampaignModal({
   const [targetMode, setTargetMode] = useState<'filter' | 'select'>('select');
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
   const [leadSearch, setLeadSearch] = useState('');
-  const [headerMediaUrl, setHeaderMediaUrl] = useState('');
+  const [headerMediaUrl, setHeaderMediaUrl] = useState(SAVED_MEDIA[0]?.url || '');
   const [skipDuplicate, setSkipDuplicate] = useState(true);
   const [formData, setFormData] = useState({
     name: '',
@@ -366,22 +374,44 @@ function CreateCampaignModal({
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 {selectedTemplate?.headerType === 'VIDEO' ? 'Video' : 'Image'} URL *
               </label>
-              <input
-                type="url"
-                className="input"
-                placeholder={
-                  selectedTemplate?.headerType === 'VIDEO'
-                    ? 'https://example.com/promo-video.mp4'
-                    : 'https://example.com/product-image.jpg'
-                }
-                value={headerMediaUrl}
-                onChange={(e) => setHeaderMediaUrl(e.target.value)}
-                required
-              />
+              <select
+                className="input mb-2"
+                value={SAVED_MEDIA.some((m) => m.url === headerMediaUrl) ? headerMediaUrl : '__custom__'}
+                onChange={(e) => {
+                  if (e.target.value === '__custom__') {
+                    setHeaderMediaUrl('');
+                  } else {
+                    setHeaderMediaUrl(e.target.value);
+                  }
+                }}
+              >
+                {SAVED_MEDIA.filter(
+                  (m) => m.type === (selectedTemplate?.headerType === 'VIDEO' ? 'video' : 'image')
+                ).map((m) => (
+                  <option key={m.url} value={m.url}>
+                    {m.label}
+                  </option>
+                ))}
+                <option value="__custom__">Custom URL...</option>
+              </select>
+              {!SAVED_MEDIA.some((m) => m.url === headerMediaUrl) && (
+                <input
+                  type="url"
+                  className="input"
+                  placeholder={
+                    selectedTemplate?.headerType === 'VIDEO'
+                      ? 'https://example.com/promo-video.mp4'
+                      : 'https://example.com/product-image.jpg'
+                  }
+                  value={headerMediaUrl}
+                  onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                  required
+                />
+              )}
               <p className="text-xs text-gray-500 mt-1">
                 {selectedTemplate?.headerType === 'VIDEO'
-                  ? 'Provide a publicly accessible .mp4 video URL (max 16MB)'
-                  : 'Provide a publicly accessible image URL (JPEG/PNG, max 5MB)'}
+                  ? 'Publicly accessible .mp4 video URL (max 16MB)'
+                  : 'Publicly accessible image URL (JPEG/PNG, max 5MB)'}
               </p>
             </div>
           )}
