@@ -19,7 +19,7 @@ export default function Conversations() {
   // Contact list — disable auto-refetch during active search
   const { data: contactsData, isLoading: contactsLoading } = useQuery({
     queryKey: ['conversations', searchQuery],
-    queryFn: () => conversationsApi.list({ search: searchQuery || undefined, limit: 50 }),
+    queryFn: () => conversationsApi.list({ search: searchQuery || undefined }),
     refetchInterval: searchQuery ? false : 10000,
   });
 

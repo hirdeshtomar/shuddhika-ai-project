@@ -20,9 +20,6 @@ const sendTemplateSchema = z.object({
 
 // GET /api/conversations - List leads with their latest message
 router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
-  const page = Math.max(1, parseInt(req.query.page as string) || 1);
-  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 30));
-  const skip = (page - 1) * limit;
   const search = req.query.search as string | undefined;
 
   const where: any = {
@@ -37,34 +34,31 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<Ap
     ];
   }
 
-  const [leads, total] = await Promise.all([
-    prisma.lead.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        businessName: true,
-        city: true,
-        optedOut: true,
-        lastContactedAt: true,
-        messages: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: {
-            id: true,
-            content: true,
-            direction: true,
-            status: true,
-            createdAt: true,
-          },
+  // Fetch all leads with messages (no pagination — contact list is small for a CRM)
+  const leads = await prisma.lead.findMany({
+    where,
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      businessName: true,
+      city: true,
+      optedOut: true,
+      lastContactedAt: true,
+      messages: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: {
+          id: true,
+          content: true,
+          direction: true,
+          status: true,
+          createdAt: true,
         },
       },
-      skip,
-      take: limit,
-    }),
-    prisma.lead.count({ where }),
-  ]);
+    },
+  });
+  const total = leads.length;
 
   const conversations = leads
     .map((lead) => ({
@@ -85,7 +79,7 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<Ap
   res.json({
     success: true,
     data: conversations,
-    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    pagination: { page: 1, limit: total, total, totalPages: 1 },
   });
 });
 
