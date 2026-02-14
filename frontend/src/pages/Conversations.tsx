@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, ArrowLeft, Send, Clock, Check, CheckCheck, AlertCircle,
-  FileText, X, User, Play, Image, Trash2, ChevronDown,
+  FileText, X, User, Play, Image, Trash2, ChevronDown, MessageSquare,
 } from 'lucide-react';
 import { conversationsApi, templatesApi } from '../services/api';
 import type { Conversation, MessageLogEntry, MessageStatus, MessageTemplate } from '../types';
@@ -135,10 +135,8 @@ export default function Conversations() {
   };
 
   const selectContact = useCallback((leadId: string) => {
-    // Snapshot the last-read time BEFORE marking as read (so we can show the divider)
     const lastRead = getLastRead();
     setLastReadSnapshot(lastRead[leadId] || null);
-    // Mark as read
     markAsRead(leadId);
     setSelectedLeadId(leadId);
     setMessageText('');
@@ -148,13 +146,9 @@ export default function Conversations() {
   const newMessagesDividerIndex = (() => {
     if (!lastReadSnapshot || messages.length === 0) return -1;
     const lastReadTime = new Date(lastReadSnapshot).getTime();
-    // Find first INBOUND message after lastReadTime
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
-      if (
-        msg.direction === 'INBOUND' &&
-        new Date(msg.createdAt).getTime() > lastReadTime
-      ) {
+      if (msg.direction === 'INBOUND' && new Date(msg.createdAt).getTime() > lastReadTime) {
         return i;
       }
     }
@@ -162,93 +156,96 @@ export default function Conversations() {
   })();
 
   return (
-    <div className="h-[calc(100vh-7rem)] -m-6 flex bg-gray-100 overflow-hidden">
-      {/* Left Panel: Contact List */}
+    <div className="h-[calc(100dvh-4rem)] lg:h-[calc(100vh-7rem)] -m-6 flex bg-gray-100 overflow-hidden">
+      {/* ─── Left Panel: Contact List ─── */}
       <div
         className={`w-full md:w-80 lg:w-96 bg-white border-r flex flex-col flex-shrink-0 ${
           selectedLeadId ? 'hidden md:flex' : 'flex'
         }`}
       >
-        {/* Search Header */}
-        <div className="p-3 border-b">
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search contacts..."
-              className="w-full pl-9 pr-3 py-2 text-sm bg-gray-100 rounded-lg border-0 focus:ring-2 focus:ring-primary-500 focus:bg-white"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+        {/* Mobile Page Title + Search */}
+        <div className="border-b flex-shrink-0">
+          <div className="px-4 pt-4 pb-1 md:hidden">
+            <h1 className="text-xl font-bold text-gray-900">Conversations</h1>
+          </div>
+          <div className="px-4 py-3">
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search contacts..."
+                className="w-full pl-9 pr-3 py-2.5 text-sm bg-gray-100 rounded-xl border-0 focus:ring-2 focus:ring-primary-500 focus:bg-white transition-colors"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
         {/* Contact List */}
         <div className="flex-1 overflow-y-auto">
           {contactsLoading ? (
-            <div className="flex items-center justify-center py-10">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
+            <div className="flex items-center justify-center py-16">
+              <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-primary-600" />
             </div>
           ) : conversations.length === 0 ? (
-            <div className="text-center py-10 text-gray-500 text-sm">
-              {searchQuery ? 'No contacts found' : 'No conversations yet'}
+            <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+              <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                <MessageSquare size={24} className="text-gray-400" />
+              </div>
+              <p className="text-sm font-medium text-gray-600">
+                {searchQuery ? 'No contacts found' : 'No conversations yet'}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {searchQuery ? 'Try a different search' : 'Send a campaign to start messaging'}
+              </p>
             </div>
           ) : (
             <>
               {conversations.map((conv) => {
                 const unread = isUnread(conv);
                 return (
-                  <div
+                  <button
                     key={conv.leadId}
-                    className={`group w-full flex items-center gap-3 px-3 py-3 hover:bg-gray-50 transition-colors ${
-                      selectedLeadId === conv.leadId ? 'bg-primary-50' : ''
+                    onClick={() => selectContact(conv.leadId)}
+                    className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left transition-colors active:bg-gray-100 ${
+                      selectedLeadId === conv.leadId
+                        ? 'bg-primary-50'
+                        : unread
+                          ? 'bg-green-50/40'
+                          : 'hover:bg-gray-50'
                     }`}
                   >
-                    <button
-                      onClick={() => selectContact(conv.leadId)}
-                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                    >
-                      <Avatar name={conv.name} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className={`text-sm truncate ${unread ? 'font-bold text-gray-900' : 'font-medium text-gray-900'}`}>
-                            {conv.name}
-                          </p>
-                          {conv.lastMessage && (
-                            <span className={`text-xs flex-shrink-0 ml-2 ${unread ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
-                              {formatTime(conv.lastMessage.createdAt)}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 mt-0.5">
-                          {conv.lastMessage?.direction === 'OUTBOUND' && (
-                            <StatusTick status={conv.lastMessage.status} size={12} />
-                          )}
-                          <p className={`text-xs truncate ${unread ? 'text-gray-800 font-medium' : 'text-gray-500'}`}>
-                            {parsePreview(conv.lastMessage?.content)}
-                          </p>
-                          {unread && (
-                            <span className="ml-auto flex-shrink-0 w-2.5 h-2.5 bg-green-500 rounded-full" />
-                          )}
-                        </div>
+                    <Avatar name={conv.name} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={`text-[15px] truncate ${unread ? 'font-bold text-gray-900' : 'font-medium text-gray-900'}`}>
+                          {conv.name}
+                        </p>
+                        {conv.lastMessage && (
+                          <span className={`text-[11px] flex-shrink-0 ${unread ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                            {formatTime(conv.lastMessage.createdAt)}
+                          </span>
+                        )}
                       </div>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeleteTarget({ leadId: conv.leadId, name: conv.name });
-                      }}
-                      className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                      title="Delete conversation"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {conv.lastMessage?.direction === 'OUTBOUND' && (
+                          <StatusTick status={conv.lastMessage.status} size={13} />
+                        )}
+                        <p className={`text-[13px] truncate flex-1 ${unread ? 'text-gray-700 font-medium' : 'text-gray-500'}`}>
+                          {parsePreview(conv.lastMessage?.content)}
+                        </p>
+                        {unread && (
+                          <span className="flex-shrink-0 w-2.5 h-2.5 bg-green-500 rounded-full" />
+                        )}
+                      </div>
+                    </div>
+                  </button>
                 );
               })}
 
               {/* Infinite scroll sentinel */}
-              <div ref={loadMoreRef} className="py-3 flex justify-center">
+              <div ref={loadMoreRef} className="py-4 flex justify-center">
                 {isFetchingNextPage ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600" />
                 ) : hasNextPage ? (
@@ -267,7 +264,7 @@ export default function Conversations() {
         </div>
       </div>
 
-      {/* Right Panel: Chat Thread */}
+      {/* ─── Right Panel: Chat Thread ─── */}
       <div
         className={`flex-1 min-w-0 flex flex-col bg-[#e5ddd5] ${
           selectedLeadId ? 'flex' : 'hidden md:flex'
@@ -275,9 +272,9 @@ export default function Conversations() {
       >
         {!selectedLeadId ? (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center text-gray-500">
-              <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Send size={24} className="text-gray-400" />
+            <div className="text-center text-gray-500 px-6">
+              <div className="w-20 h-20 bg-gray-200/80 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Send size={28} className="text-gray-400" />
               </div>
               <p className="text-lg font-medium">Select a conversation</p>
               <p className="text-sm mt-1">Choose a contact to view messages</p>
@@ -286,17 +283,17 @@ export default function Conversations() {
         ) : (
           <>
             {/* Chat Header */}
-            <div className="bg-white px-4 py-3 border-b flex items-center gap-3">
+            <div className="bg-white px-2 md:px-4 py-2 md:py-2.5 border-b flex items-center gap-2 md:gap-3 shadow-sm flex-shrink-0">
               <button
                 onClick={() => setSelectedLeadId(null)}
-                className="md:hidden p-1 text-gray-500 hover:text-gray-700"
+                className="md:hidden p-2 text-gray-600 rounded-full active:bg-gray-100"
               >
-                <ArrowLeft size={20} />
+                <ArrowLeft size={22} />
               </button>
-              <Avatar name={lead?.name || ''} />
+              <Avatar name={lead?.name || ''} size="sm" />
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-900 text-sm truncate">{lead?.name}</p>
-                <p className="text-xs text-gray-500 truncate">
+                <p className="font-semibold text-gray-900 text-[15px] leading-tight truncate">{lead?.name}</p>
+                <p className="text-[11px] md:text-xs text-gray-500 truncate mt-0.5">
                   {lead?.phone}
                   {lead?.businessName && ` · ${lead.businessName}`}
                   {lead?.city && ` · ${lead.city}`}
@@ -312,7 +309,7 @@ export default function Conversations() {
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-3 space-y-1">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 md:px-4 py-3 space-y-1">
               {messagesError ? (
                 <div className="text-center py-10">
                   <p className="text-sm text-red-600 bg-white/80 rounded-lg inline-block px-4 py-2">
@@ -331,7 +328,7 @@ export default function Conversations() {
                     {idx === newMessagesDividerIndex && (
                       <div className="flex items-center gap-3 py-2 my-1">
                         <div className="flex-1 h-px bg-[#f9a825]" />
-                        <span className="text-xs font-medium text-[#f9a825] bg-white/90 px-3 py-1 rounded-full shadow-sm uppercase tracking-wide">
+                        <span className="text-[11px] font-medium text-[#f9a825] bg-white/90 px-3 py-1 rounded-full shadow-sm uppercase tracking-wide">
                           New Messages
                         </span>
                         <div className="flex-1 h-px bg-[#f9a825]" />
@@ -348,39 +345,39 @@ export default function Conversations() {
             </div>
 
             {/* Input Area */}
-            <div className="bg-white px-4 py-3 border-t">
+            <div className="bg-white px-2 md:px-4 py-2 md:py-3 border-t flex-shrink-0 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               {lead?.optedOut ? (
                 <div className="text-center text-sm text-orange-600 py-2">
                   This contact has opted out of messages
                 </div>
               ) : (
-                <form onSubmit={handleSendText} className="flex items-center gap-2">
+                <form onSubmit={handleSendText} className="flex items-center gap-1 md:gap-2">
                   <button
                     type="button"
                     onClick={() => setShowTemplateModal(true)}
-                    className="p-2 text-gray-500 hover:text-primary-600 hover:bg-gray-100 rounded-full"
+                    className="p-2.5 text-gray-500 hover:text-primary-600 active:bg-gray-100 rounded-full flex-shrink-0"
                     title="Send template message"
                   >
-                    <FileText size={20} />
+                    <FileText size={22} />
                   </button>
                   <input
                     type="text"
                     placeholder="Type a message..."
-                    className="flex-1 py-2 px-4 bg-gray-100 rounded-full text-sm border-0 focus:ring-2 focus:ring-primary-500 focus:bg-white"
+                    className="flex-1 min-w-0 py-2.5 px-4 bg-gray-100 rounded-full text-[15px] md:text-sm border-0 focus:ring-2 focus:ring-primary-500 focus:bg-white"
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}
                   />
                   <button
                     type="submit"
                     disabled={!messageText.trim() || sendTextMutation.isPending}
-                    className="p-2 text-white bg-primary-600 hover:bg-primary-700 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-2.5 text-white bg-primary-600 hover:bg-primary-700 rounded-full disabled:opacity-50 active:bg-primary-800 flex-shrink-0"
                   >
-                    <Send size={18} />
+                    <Send size={20} />
                   </button>
                 </form>
               )}
               {sendTextMutation.isError && (
-                <p className="text-xs text-red-500 mt-1 text-center">
+                <p className="text-xs text-red-500 mt-1.5 text-center">
                   {(sendTextMutation.error as any)?.response?.data?.error || 'Failed to send message'}
                 </p>
               )}
@@ -389,10 +386,10 @@ export default function Conversations() {
         )}
       </div>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation — bottom sheet on mobile */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50">
+          <div className="bg-white w-full md:max-w-sm md:rounded-xl rounded-t-2xl shadow-xl p-5 md:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
             <h3 className="font-semibold text-gray-900 text-lg">Delete conversation?</h3>
             <p className="text-sm text-gray-500 mt-2">
               This will permanently delete all messages with{' '}
@@ -402,14 +399,14 @@ export default function Conversations() {
             <div className="flex gap-3 mt-5">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="flex-1 px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
+                className="flex-1 px-4 py-3 md:py-2.5 text-sm font-medium border rounded-xl hover:bg-gray-50 active:bg-gray-100"
               >
                 Cancel
               </button>
               <button
                 onClick={() => deleteMutation.mutate(deleteTarget.leadId)}
                 disabled={deleteMutation.isPending}
-                className="flex-1 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                className="flex-1 px-4 py-3 md:py-2.5 text-sm font-medium bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 active:bg-red-800"
               >
                 {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
@@ -423,7 +420,7 @@ export default function Conversations() {
         </div>
       )}
 
-      {/* Template Selector Modal */}
+      {/* Template Selector — bottom sheet on mobile */}
       {showTemplateModal && selectedLeadId && (
         <TemplateModal
           onSelect={(templateId, headerMediaUrl) => sendTemplateMutation.mutate({ templateId, headerMediaUrl })}
@@ -437,7 +434,7 @@ export default function Conversations() {
 
 /* ─── Sub-components ─── */
 
-function Avatar({ name }: { name: string }) {
+function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
   const initials = name
     .split(' ')
     .map((w) => w[0])
@@ -445,9 +442,13 @@ function Avatar({ name }: { name: string }) {
     .toUpperCase()
     .slice(0, 2);
 
+  const sizeClasses = size === 'sm'
+    ? 'w-9 h-9 text-xs'
+    : 'w-11 h-11 text-sm';
+
   return (
-    <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-semibold text-sm flex-shrink-0">
-      {initials || <User size={16} />}
+    <div className={`${sizeClasses} rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-semibold flex-shrink-0`}>
+      {initials || <User size={size === 'sm' ? 14 : 16} />}
     </div>
   );
 }
@@ -455,7 +456,6 @@ function Avatar({ name }: { name: string }) {
 function ChatBubble({ message, isNew }: { message: MessageLogEntry; isNew?: boolean }) {
   const isOutbound = message.direction === 'OUTBOUND';
 
-  // Parse content that may contain JSON with media info
   let textContent = message.content || message.template?.bodyText || '[Message]';
   let mediaUrl: string | undefined;
   let mediaType: string | undefined;
@@ -469,7 +469,6 @@ function ChatBubble({ message, isNew }: { message: MessageLogEntry; isNew?: bool
     } catch { /* not JSON, use as-is */ }
   }
 
-  // Also check template headerType for older messages without JSON content
   if (!mediaUrl && message.template?.headerType === 'VIDEO') {
     mediaType = 'VIDEO';
   } else if (!mediaUrl && message.template?.headerType === 'IMAGE') {
@@ -479,25 +478,25 @@ function ChatBubble({ message, isNew }: { message: MessageLogEntry; isNew?: bool
   return (
     <div className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-sm ${
+        className={`max-w-[85%] sm:max-w-[75%] rounded-xl px-3 py-2 text-[15px] sm:text-sm shadow-sm ${
           isOutbound
-            ? 'bg-[#dcf8c6] text-gray-900 rounded-tr-none'
+            ? 'bg-[#dcf8c6] text-gray-900 rounded-tr-sm'
             : isNew
-              ? 'bg-[#f0f9e8] text-gray-900 rounded-tl-none ring-1 ring-green-200'
-              : 'bg-white text-gray-900 rounded-tl-none'
+              ? 'bg-[#f0f9e8] text-gray-900 rounded-tl-sm ring-1 ring-green-200'
+              : 'bg-white text-gray-900 rounded-tl-sm'
         }`}
       >
         {mediaUrl && mediaType === 'VIDEO' ? (
-          <video src={mediaUrl} controls className="rounded-md mb-2 max-w-full" style={{ maxHeight: 240 }} />
+          <video src={mediaUrl} controls className="rounded-lg mb-2 max-w-full" style={{ maxHeight: 240 }} />
         ) : mediaUrl && mediaType === 'IMAGE' ? (
-          <img src={mediaUrl} alt="" className="rounded-md mb-2 max-w-full" style={{ maxHeight: 240 }} />
+          <img src={mediaUrl} alt="" className="rounded-lg mb-2 max-w-full" style={{ maxHeight: 240 }} />
         ) : mediaType === 'VIDEO' ? (
-          <div className="flex items-center gap-2 bg-black/10 rounded-md px-3 py-2 mb-2">
+          <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2">
             <Play size={16} className="text-gray-600" />
             <span className="text-xs text-gray-600">Video message</span>
           </div>
         ) : mediaType === 'IMAGE' ? (
-          <div className="flex items-center gap-2 bg-black/10 rounded-md px-3 py-2 mb-2">
+          <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2">
             <Image size={16} className="text-gray-600" />
             <span className="text-xs text-gray-600">Image message</span>
           </div>
@@ -564,14 +563,16 @@ function TemplateModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[70vh] flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h3 className="font-semibold text-gray-900">
+    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50">
+      <div className="bg-white w-full md:max-w-md md:rounded-xl rounded-t-2xl shadow-xl max-h-[85dvh] md:max-h-[70vh] flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
+        <div className="flex items-center justify-between px-4 py-3.5 border-b flex-shrink-0">
+          {/* Drag handle indicator on mobile */}
+          <div className="absolute left-1/2 -translate-x-1/2 top-2 w-10 h-1 bg-gray-300 rounded-full md:hidden" />
+          <h3 className="font-semibold text-gray-900 text-base">
             {selectedTemplate ? 'Confirm & Send' : 'Send Template'}
           </h3>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
-            <X size={20} />
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-full active:bg-gray-100">
+            <X size={22} />
           </button>
         </div>
 
@@ -581,68 +582,69 @@ function TemplateModal({
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
             </div>
           ) : selectedTemplate ? (
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg border bg-gray-50">
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl border bg-gray-50">
                 <p className="font-medium text-sm text-gray-900">{selectedTemplate.name}</p>
-                <p className="text-xs text-gray-500 mt-1">{selectedTemplate.bodyText || selectedTemplate.content}</p>
+                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{selectedTemplate.bodyText || selectedTemplate.content}</p>
               </div>
 
               {needsMedia && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     {selectedTemplate.headerType === 'VIDEO' ? 'Video' : 'Image'} URL (required)
                   </label>
                   <input
                     type="url"
                     placeholder={`https://example.com/media.${selectedTemplate.headerType === 'VIDEO' ? 'mp4' : 'jpg'}`}
-                    className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3.5 py-2.5 text-sm border rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     value={mediaUrl}
                     onChange={(e) => setMediaUrl(e.target.value)}
                   />
                 </div>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex gap-3 pt-1">
                 <button
                   onClick={() => { setSelectedTemplate(null); setMediaUrl(''); }}
-                  className="flex-1 px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-3 py-3 md:py-2.5 text-sm font-medium border rounded-xl hover:bg-gray-50 active:bg-gray-100"
                 >
                   Back
                 </button>
                 <button
                   onClick={handleSend}
                   disabled={isSending || (needsMedia && !mediaUrl)}
-                  className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                  className="flex-1 px-3 py-3 md:py-2.5 text-sm font-medium bg-primary-600 text-white rounded-xl hover:bg-primary-700 disabled:opacity-50 active:bg-primary-800"
                 >
                   {isSending ? 'Sending...' : 'Send'}
                 </button>
               </div>
             </div>
           ) : templates.length === 0 ? (
-            <p className="text-center text-gray-500 py-8 text-sm">
-              No approved templates available
-            </p>
+            <div className="flex flex-col items-center justify-center py-10">
+              <FileText size={32} className="text-gray-300 mb-2" />
+              <p className="text-sm text-gray-500">No approved templates available</p>
+            </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {templates.map((template) => (
                 <button
                   key={template.id}
                   onClick={() => setSelectedTemplate(template)}
-                  className="w-full text-left p-3 rounded-lg border hover:border-primary-300 hover:bg-primary-50 transition-colors"
+                  className="w-full text-left p-3.5 rounded-xl border hover:border-primary-300 hover:bg-primary-50 transition-colors active:bg-primary-100"
                 >
                   <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm text-gray-900">{template.name}</p>
-                    <span className="text-xs text-gray-400 uppercase">{template.language}</span>
+                    <p className="font-medium text-[15px] sm:text-sm text-gray-900">{template.name}</p>
+                    <span className="text-xs text-gray-400 uppercase ml-2">{template.language}</span>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                  <p className="text-[13px] sm:text-xs text-gray-500 mt-1 line-clamp-2 leading-relaxed">
                     {template.bodyText || template.content}
                   </p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
                       {template.category}
                     </span>
                     {(template.headerType === 'VIDEO' || template.headerType === 'IMAGE') && (
-                      <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded">
+                      <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
                         {template.headerType}
                       </span>
                     )}
