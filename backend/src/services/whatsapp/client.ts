@@ -192,7 +192,7 @@ export class WhatsAppClient {
    * Build template components with parameters
    */
   buildTemplateComponents(
-    bodyParams: string[],
+    bodyParams: Array<string | { name: string; value: string }>,
     headerParams?: { type: 'text' | 'image' | 'video'; value: string },
     buttons?: Array<{ type: 'quick_reply' | 'url'; payload?: string }>
   ): WhatsAppTemplateComponent[] {
@@ -220,7 +220,13 @@ export class WhatsAppClient {
     if (bodyParams.length > 0) {
       components.push({
         type: 'body',
-        parameters: bodyParams.map((text) => ({ type: 'text', text })),
+        parameters: bodyParams.map((param) => {
+          if (typeof param === 'string') {
+            return { type: 'text', text: param };
+          }
+          // Named parameter: include parameter_name for WhatsApp API
+          return { type: 'text', parameter_name: param.name, text: param.value };
+        }),
       });
     }
 
@@ -274,13 +280,14 @@ export async function sendCampaignMessage(
   }
 
   // Auto-fill body params from lead data when none provided
+  let resolvedBodyParams: Array<string | { name: string; value: string }> = bodyParams;
   if (bodyParams.length === 0 && template.bodyText) {
     // Support both numbered ({{1}}) and named ({{name}}) variables
     const namedVars = template.bodyText.match(/\{\{([a-zA-Z_]\w*)\}\}/g) || [];
     const numberedVars = template.bodyText.match(/\{\{\d+\}\}/g) || [];
 
     if (namedVars.length > 0) {
-      // Named params: map variable names to lead fields
+      // Named params: map variable names to lead fields with parameter_name
       const fieldMap: Record<string, string> = {
         name: lead.name || lead.businessName || 'there',
         business_name: lead.businessName || lead.name || '',
@@ -288,9 +295,10 @@ export async function sendCampaignMessage(
         city: lead.city || '',
         phone: lead.phone || '',
       };
-      bodyParams = namedVars.map((v) => {
-        const key = v.replace(/\{|\}/g, '').toLowerCase();
-        return fieldMap[key] || lead.name || 'there';
+      resolvedBodyParams = namedVars.map((v) => {
+        const paramName = v.replace(/\{|\}/g, '');
+        const key = paramName.toLowerCase();
+        return { name: paramName, value: fieldMap[key] || lead.name || 'there' };
       });
     } else if (numberedVars.length > 0) {
       // Numbered params: {{1}}=name, {{2}}=businessName, {{3}}=city, {{4}}=phone
@@ -300,7 +308,7 @@ export async function sendCampaignMessage(
         lead.city || '',
         lead.phone || '',
       ];
-      bodyParams = leadFields.slice(0, numberedVars.length);
+      resolvedBodyParams = leadFields.slice(0, numberedVars.length);
     }
   }
 
@@ -327,7 +335,7 @@ export async function sendCampaignMessage(
   }
 
   // Send message
-  const components = whatsappClient.buildTemplateComponents(bodyParams, headerParams);
+  const components = whatsappClient.buildTemplateComponents(resolvedBodyParams, headerParams);
   const result = await whatsappClient.sendTemplateMessage({
     to: lead.phone,
     templateName: template.whatsappTemplateName,
