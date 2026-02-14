@@ -208,7 +208,7 @@ export default function Layout() {
         </div>
 
         {/* Page content */}
-        <main className="p-6">
+        <main className="p-6 overflow-x-hidden">
           <Outlet />
         </main>
       </div>

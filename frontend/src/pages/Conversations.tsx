@@ -85,7 +85,7 @@ export default function Conversations() {
   };
 
   return (
-    <div className="h-[calc(100vh-7rem)] -m-6 flex bg-gray-100">
+    <div className="h-[calc(100vh-7rem)] -m-6 flex bg-gray-100 overflow-hidden">
       {/* Left Panel: Contact List */}
       <div
         className={`w-full md:w-80 lg:w-96 bg-white border-r flex flex-col flex-shrink-0 ${
@@ -166,7 +166,7 @@ export default function Conversations() {
 
       {/* Right Panel: Chat Thread */}
       <div
-        className={`flex-1 flex flex-col bg-[#e5ddd5] ${
+        className={`flex-1 min-w-0 flex flex-col bg-[#e5ddd5] ${
           selectedLeadId ? 'flex' : 'hidden md:flex'
         }`}
       >
@@ -209,7 +209,7 @@ export default function Conversations() {
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-3 space-y-1">
               {messagesError ? (
                 <div className="text-center py-10">
                   <p className="text-sm text-red-600 bg-white/80 rounded-lg inline-block px-4 py-2">
@@ -383,7 +383,7 @@ function ChatBubble({ message }: { message: MessageLogEntry }) {
             <span className="text-xs text-gray-600">Image message</span>
           </div>
         ) : null}
-        <p className="whitespace-pre-wrap break-words">{textContent}</p>
+        <p className="whitespace-pre-wrap break-words overflow-hidden">{textContent}</p>
         <div className={`flex items-center gap-1 mt-1 ${isOutbound ? 'justify-end' : ''}`}>
           <span className="text-[10px] text-gray-500">
             {formatTime(message.sentAt || message.createdAt)}
