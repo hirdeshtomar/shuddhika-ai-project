@@ -275,16 +275,32 @@ export async function sendCampaignMessage(
 
   // Auto-fill body params from lead data when none provided
   if (bodyParams.length === 0 && template.bodyText) {
-    const varCount = (template.bodyText.match(/\{\{\d+\}\}/g) || []).length;
-    if (varCount > 0) {
-      // Map variable positions to lead fields: {{1}}=name, {{2}}=businessName, {{3}}=city, {{4}}=phone
+    // Support both numbered ({{1}}) and named ({{name}}) variables
+    const namedVars = template.bodyText.match(/\{\{([a-zA-Z_]\w*)\}\}/g) || [];
+    const numberedVars = template.bodyText.match(/\{\{\d+\}\}/g) || [];
+
+    if (namedVars.length > 0) {
+      // Named params: map variable names to lead fields
+      const fieldMap: Record<string, string> = {
+        name: lead.name || lead.businessName || 'there',
+        business_name: lead.businessName || lead.name || '',
+        businessname: lead.businessName || lead.name || '',
+        city: lead.city || '',
+        phone: lead.phone || '',
+      };
+      bodyParams = namedVars.map((v) => {
+        const key = v.replace(/\{|\}/g, '').toLowerCase();
+        return fieldMap[key] || lead.name || 'there';
+      });
+    } else if (numberedVars.length > 0) {
+      // Numbered params: {{1}}=name, {{2}}=businessName, {{3}}=city, {{4}}=phone
       const leadFields = [
         lead.name || lead.businessName || 'there',
         lead.businessName || lead.name || '',
         lead.city || '',
         lead.phone || '',
       ];
-      bodyParams = leadFields.slice(0, varCount);
+      bodyParams = leadFields.slice(0, numberedVars.length);
     }
   }
 
