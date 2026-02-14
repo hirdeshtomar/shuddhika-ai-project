@@ -143,7 +143,7 @@ export default function Conversations() {
                         <StatusTick status={conv.lastMessage.status} size={12} />
                       )}
                       <p className="text-xs text-gray-500 truncate">
-                        {conv.lastMessage?.content || 'Template message'}
+                        {parsePreview(conv.lastMessage?.content)}
                       </p>
                     </div>
                   </div>
@@ -539,6 +539,17 @@ function TemplateModal({
 }
 
 /* ─── Helpers ─── */
+
+function parsePreview(content?: string): string {
+  if (!content) return 'Template message';
+  if (content.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(content);
+      return parsed.text || 'Template message';
+    } catch { /* not JSON */ }
+  }
+  return content;
+}
 
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
