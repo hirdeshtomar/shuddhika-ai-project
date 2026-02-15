@@ -154,6 +154,21 @@ router.get('/stats', authenticate, async (req: AuthenticatedRequest, res: Respon
   });
 });
 
+// GET /api/leads/cities - Get distinct city values
+router.get('/cities', authenticate, async (_req: AuthenticatedRequest, res: Response<ApiResponse>) => {
+  const cities = await prisma.lead.findMany({
+    where: { NOT: [{ city: null }, { city: '' }] },
+    select: { city: true },
+    distinct: ['city'],
+    orderBy: { city: 'asc' },
+  });
+
+  res.json({
+    success: true,
+    data: cities.map((c) => c.city).filter(Boolean),
+  });
+});
+
 // GET /api/leads/:id - Get single lead
 router.get('/:id', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
   const lead = await prisma.lead.findUnique({

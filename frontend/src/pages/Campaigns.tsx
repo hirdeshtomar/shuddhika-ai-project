@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Play, Pause, Trash2, Eye, X, Search, Check } from 'lucide-react';
+import { Plus, Play, Pause, Trash2, Eye, X, Search, Check, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { campaignsApi, templatesApi, leadsApi } from '../services/api';
 import type { CampaignStatus, MessageTemplate, Lead } from '../types';
@@ -219,6 +219,7 @@ function CreateCampaignModal({
   const [targetMode, setTargetMode] = useState<'filter' | 'select'>('select');
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
   const [leadSearch, setLeadSearch] = useState('');
+  const [cityFilter, setCityFilter] = useState('');
   const [headerMediaUrl, setHeaderMediaUrl] = useState(SAVED_MEDIA[0]?.url || '');
   const [skipDuplicate, setSkipDuplicate] = useState(true);
   const [formData, setFormData] = useState({
@@ -235,10 +236,17 @@ function CreateCampaignModal({
   const selectedTemplate = templates.find((t) => t.id === formData.templateId);
   const needsMediaUrl = selectedTemplate?.headerType === 'IMAGE' || selectedTemplate?.headerType === 'VIDEO';
 
-  // Fetch leads for the picker
+  // Fetch distinct cities for the filter
+  const { data: citiesData } = useQuery({
+    queryKey: ['lead-cities'],
+    queryFn: leadsApi.getCities,
+  });
+  const availableCities = (citiesData?.data || []) as string[];
+
+  // Fetch leads for the picker (with city filter)
   const { data: leadsData, isLoading: leadsLoading } = useQuery({
-    queryKey: ['leads-picker', leadSearch],
-    queryFn: () => leadsApi.list({ search: leadSearch || undefined, limit: 100 }),
+    queryKey: ['leads-picker', leadSearch, cityFilter],
+    queryFn: () => leadsApi.list({ search: leadSearch || undefined, city: cityFilter || undefined, limit: 100 }),
     enabled: targetMode === 'select',
   });
 
@@ -289,6 +297,18 @@ function CreateCampaignModal({
         status: prev.targetFilters.status.includes(status)
           ? prev.targetFilters.status.filter((s) => s !== status)
           : [...prev.targetFilters.status, status],
+      },
+    }));
+  };
+
+  const handleCityToggle = (city: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      targetFilters: {
+        ...prev.targetFilters,
+        cities: prev.targetFilters.cities.includes(city)
+          ? prev.targetFilters.cities.filter((c) => c !== city)
+          : [...prev.targetFilters.cities, city],
       },
     }));
   };
@@ -450,15 +470,30 @@ function CreateCampaignModal({
           {/* Select Specific Leads */}
           {targetMode === 'select' && (
             <div>
-              <div className="relative mb-2">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  className="input pl-9"
-                  placeholder="Search by name, phone, or business..."
-                  value={leadSearch}
-                  onChange={(e) => setLeadSearch(e.target.value)}
-                />
+              <div className="flex gap-2 mb-2">
+                <div className="relative flex-1">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    className="input pl-9"
+                    placeholder="Search by name, phone, or business..."
+                    value={leadSearch}
+                    onChange={(e) => setLeadSearch(e.target.value)}
+                  />
+                </div>
+                <div className="relative shrink-0">
+                  <MapPin size={16} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <select
+                    className="input pl-8 pr-8 appearance-none min-w-[120px]"
+                    value={cityFilter}
+                    onChange={(e) => setCityFilter(e.target.value)}
+                  >
+                    <option value="">All Cities</option>
+                    {availableCities.map((city) => (
+                      <option key={city} value={city}>{city}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-gray-600">
@@ -530,28 +565,58 @@ function CreateCampaignModal({
 
           {/* Filter by Status */}
           {targetMode === 'filter' && (
-            <div>
-              <div className="flex flex-wrap gap-2">
-                {['NEW', 'CONTACTED', 'INTERESTED', 'NEGOTIATING'].map((status) => (
-                  <label
-                    key={status}
-                    className={`px-3 py-1.5 rounded-full text-sm cursor-pointer ${
-                      formData.targetFilters.status.includes(status)
-                        ? 'bg-primary-100 text-primary-700 border-primary-200'
-                        : 'bg-gray-100 text-gray-600 border-gray-200'
-                    } border`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={formData.targetFilters.status.includes(status)}
-                      onChange={() => handleStatusChange(status)}
-                    />
-                    {status.replace(/_/g, ' ')}
-                  </label>
-                ))}
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1.5">Status</p>
+                <div className="flex flex-wrap gap-2">
+                  {['NEW', 'CONTACTED', 'INTERESTED', 'NEGOTIATING'].map((status) => (
+                    <label
+                      key={status}
+                      className={`px-3 py-1.5 rounded-full text-sm cursor-pointer ${
+                        formData.targetFilters.status.includes(status)
+                          ? 'bg-primary-100 text-primary-700 border-primary-200'
+                          : 'bg-gray-100 text-gray-600 border-gray-200'
+                      } border`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={formData.targetFilters.status.includes(status)}
+                        onChange={() => handleStatusChange(status)}
+                      />
+                      {status.replace(/_/g, ' ')}
+                    </label>
+                  ))}
+                </div>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1.5">City</p>
+                {availableCities.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {availableCities.map((city) => (
+                      <label
+                        key={city}
+                        className={`px-3 py-1.5 rounded-full text-sm cursor-pointer ${
+                          formData.targetFilters.cities.includes(city)
+                            ? 'bg-blue-100 text-blue-700 border-blue-200'
+                            : 'bg-gray-100 text-gray-600 border-gray-200'
+                        } border`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={formData.targetFilters.cities.includes(city)}
+                          onChange={() => handleCityToggle(city)}
+                        />
+                        {city}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">No cities available</p>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
                 Leave empty to target all eligible leads
               </p>
             </div>

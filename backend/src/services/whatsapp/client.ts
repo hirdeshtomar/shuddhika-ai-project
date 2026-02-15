@@ -268,7 +268,7 @@ export class WhatsAppClient {
    * Build template components with parameters
    */
   buildTemplateComponents(
-    bodyParams: Array<string | { name: string; value: string }>,
+    bodyParams: string[],
     headerParams?: { type: 'text' | 'image' | 'video'; value: string },
     buttons?: Array<{ type: 'quick_reply' | 'url'; payload?: string }>
   ): WhatsAppTemplateComponent[] {
@@ -292,17 +292,11 @@ export class WhatsAppClient {
       components.push(headerComponent);
     }
 
-    // Body component with parameters
+    // Body component with positional parameters (WhatsApp matches by order)
     if (bodyParams.length > 0) {
       components.push({
         type: 'body',
-        parameters: bodyParams.map((param) => {
-          if (typeof param === 'string') {
-            return { type: 'text', text: param };
-          }
-          // Named parameter: include parameter_name for WhatsApp API
-          return { type: 'text', parameter_name: param.name, text: param.value };
-        }),
+        parameters: bodyParams.map((text) => ({ type: 'text', text })),
       });
     }
 
@@ -356,35 +350,29 @@ export async function sendCampaignMessage(
   }
 
   // Auto-fill body params from lead data when none provided
-  let resolvedBodyParams: Array<string | { name: string; value: string }> = bodyParams;
+  // WhatsApp matches template parameters by POSITION, so we always send plain strings
+  let resolvedBodyParams: string[] = bodyParams;
   if (bodyParams.length === 0 && template.bodyText) {
-    // Support both numbered ({{1}}) and named ({{name}}) variables
-    const namedVars = template.bodyText.match(/\{\{([a-zA-Z_]\w*)\}\}/g) || [];
-    const numberedVars = template.bodyText.match(/\{\{\d+\}\}/g) || [];
+    // Extract all variables in order (both {{1}} and {{name}} styles)
+    const allVars = template.bodyText.match(/\{\{[^}]+\}\}/g) || [];
 
-    if (namedVars.length > 0) {
-      // Named params: map variable names to lead fields with parameter_name
+    if (allVars.length > 0) {
       const fieldMap: Record<string, string> = {
         name: lead.name || lead.businessName || 'there',
         business_name: lead.businessName || lead.name || '',
         businessname: lead.businessName || lead.name || '',
         city: lead.city || '',
         phone: lead.phone || '',
+        '1': lead.name || lead.businessName || 'there',
+        '2': lead.businessName || lead.name || '',
+        '3': lead.city || '',
+        '4': lead.phone || '',
       };
-      resolvedBodyParams = namedVars.map((v) => {
-        const paramName = v.replace(/\{|\}/g, '');
-        const key = paramName.toLowerCase();
-        return { name: paramName, value: fieldMap[key] || lead.name || 'there' };
+
+      resolvedBodyParams = allVars.map((v) => {
+        const key = v.replace(/\{|\}/g, '').toLowerCase();
+        return fieldMap[key] || lead.name || 'there';
       });
-    } else if (numberedVars.length > 0) {
-      // Numbered params: {{1}}=name, {{2}}=businessName, {{3}}=city, {{4}}=phone
-      const leadFields = [
-        lead.name || lead.businessName || 'there',
-        lead.businessName || lead.name || '',
-        lead.city || '',
-        lead.phone || '',
-      ];
-      resolvedBodyParams = leadFields.slice(0, numberedVars.length);
     }
   }
 

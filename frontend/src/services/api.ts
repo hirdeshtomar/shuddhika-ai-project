@@ -129,6 +129,11 @@ export const leadsApi = {
     const { data } = await api.get<ApiResponse<LeadStats>>('/leads/stats');
     return data;
   },
+
+  getCities: async () => {
+    const { data } = await api.get<ApiResponse<string[]>>('/leads/cities');
+    return data;
+  },
 };
 
 // Campaigns
