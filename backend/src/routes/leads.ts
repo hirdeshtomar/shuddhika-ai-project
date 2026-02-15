@@ -376,6 +376,38 @@ router.post('/cleanup', authenticate, async (req: AuthenticatedRequest, res: Res
   });
 });
 
+// POST /api/leads/backfill-contacted - One-time fix: mark leads with outbound messages as CONTACTED
+router.post('/backfill-contacted', authenticate, async (_req: AuthenticatedRequest, res: Response<ApiResponse>) => {
+  // Find leads that are still NEW but have at least one successful outbound message
+  const leadsWithMessages = await prisma.messageLog.findMany({
+    where: {
+      direction: 'OUTBOUND',
+      status: { in: ['SENT', 'DELIVERED', 'READ'] },
+      lead: { status: 'NEW' },
+    },
+    select: { leadId: true },
+    distinct: ['leadId'],
+  });
+
+  const leadIds = leadsWithMessages.map((m) => m.leadId);
+
+  if (leadIds.length === 0) {
+    res.json({ success: true, message: 'No leads need updating', data: { updated: 0 } });
+    return;
+  }
+
+  const result = await prisma.lead.updateMany({
+    where: { id: { in: leadIds } },
+    data: { status: 'CONTACTED' },
+  });
+
+  res.json({
+    success: true,
+    message: `Updated ${result.count} leads from NEW to CONTACTED`,
+    data: { updated: result.count },
+  });
+});
+
 // POST /api/leads/bulk-delete - Delete multiple leads
 router.post('/bulk-delete', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
   const { ids } = req.body;
