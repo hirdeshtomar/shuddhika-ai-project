@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, ArrowLeft, Send, Clock, Check, CheckCheck, AlertCircle,
-  FileText, X, User, Play, Image, Trash2, ChevronDown, MessageSquare, Paperclip,
+  FileText, X, User, Play, Image, Trash2, ChevronDown, MessageSquare, Paperclip, Mic,
 } from 'lucide-react';
 import { conversationsApi, templatesApi } from '../services/api';
 import type { Conversation, MessageLogEntry, MessageStatus, MessageTemplate } from '../types';
@@ -554,6 +554,11 @@ function ChatBubble({ message, isNew }: { message: MessageLogEntry; isNew?: bool
           <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2">
             <FileText size={16} className="text-gray-600" />
             <span className="text-xs text-gray-600">{filename || 'Document'}</span>
+          </div>
+        ) : mediaType === 'AUDIO' ? (
+          <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2">
+            <Mic size={16} className="text-gray-600" />
+            <span className="text-xs text-gray-600">Voice message</span>
           </div>
         ) : null}
         <p className="whitespace-pre-wrap break-words overflow-hidden">{textContent}</p>

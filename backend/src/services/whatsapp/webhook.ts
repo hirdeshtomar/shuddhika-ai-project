@@ -98,6 +98,7 @@ async function processIncomingMessage(message: WhatsAppIncomingMessage): Promise
 
   // Extract readable content based on message type
   const content = extractMessageContent(message);
+  if (!content) return; // Skip reaction removals, etc.
 
   // Find lead by phone number
   const lead = await prisma.lead.findUnique({
@@ -167,13 +168,32 @@ function extractMessageContent(message: WhatsAppIncomingMessage): string {
         || message.interactive?.list_reply?.title
         || '[Interactive]';
     case 'image':
-      return message.image?.caption || '[Image]';
+      return JSON.stringify({
+        text: message.image?.caption || 'Photo',
+        mediaType: 'IMAGE',
+      });
     case 'video':
-      return message.video?.caption || '[Video]';
+      return JSON.stringify({
+        text: message.video?.caption || 'Video',
+        mediaType: 'VIDEO',
+      });
     case 'document':
-      return message.document?.caption || `[Document: ${message.document?.filename || 'file'}]`;
+      return JSON.stringify({
+        text: message.document?.caption || message.document?.filename || 'Document',
+        mediaType: 'DOCUMENT',
+        filename: message.document?.filename,
+      });
+    case 'audio':
+      return JSON.stringify({
+        text: 'Voice message',
+        mediaType: 'AUDIO',
+      });
+    case 'reaction':
+      return message.reaction?.emoji || ''; // empty = reaction removed, will be skipped
     case 'location':
       return message.location?.name || message.location?.address || '[Location]';
+    case 'sticker':
+      return message.sticker?.animated ? '[Animated sticker]' : '[Sticker]';
     default:
       return `[${message.type}]`;
   }

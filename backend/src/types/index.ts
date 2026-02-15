@@ -156,7 +156,10 @@ export interface WhatsAppIncomingMessage {
   image?: { id: string; mime_type: string; caption?: string };
   video?: { id: string; mime_type: string; caption?: string };
   document?: { id: string; mime_type: string; filename?: string; caption?: string };
+  audio?: { id: string; mime_type: string };
   location?: { latitude: number; longitude: number; name?: string; address?: string };
+  reaction?: { message_id: string; emoji: string };
+  sticker?: { id: string; mime_type: string; animated?: boolean };
 }
 
 // CSV Import types
