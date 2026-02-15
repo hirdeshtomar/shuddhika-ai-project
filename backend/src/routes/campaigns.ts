@@ -428,6 +428,63 @@ router.post('/:id/resend', authenticate, async (req: AuthenticatedRequest, res: 
   });
 });
 
+// POST /api/campaigns/:id/retry-failed - Retry failed messages (excludes DO_NOT_CONTACT leads)
+router.post('/:id/retry-failed', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
+  const campaign = await prisma.campaign.findUnique({
+    where: { id: req.params.id },
+    include: { template: true },
+  });
+
+  if (!campaign) {
+    throw new AppError('Campaign not found', 404);
+  }
+
+  if (campaign.status !== 'RUNNING' && campaign.status !== 'PAUSED' && campaign.status !== 'COMPLETED') {
+    throw new AppError('Campaign must be running, paused, or completed to retry', 400);
+  }
+
+  // Get all FAILED campaign leads, excluding DO_NOT_CONTACT leads
+  const failedLeads = await prisma.campaignLead.findMany({
+    where: {
+      campaignId: campaign.id,
+      status: 'FAILED',
+      lead: { status: { notIn: ['DO_NOT_CONTACT', 'REJECTED'] }, optedOut: false },
+    },
+    select: { leadId: true },
+  });
+
+  if (failedLeads.length === 0) {
+    throw new AppError('No retryable failed messages', 400);
+  }
+
+  // Reset failed leads to PENDING
+  await prisma.campaignLead.updateMany({
+    where: {
+      campaignId: campaign.id,
+      leadId: { in: failedLeads.map((l) => l.leadId) },
+      status: 'FAILED',
+    },
+    data: { status: 'PENDING' },
+  });
+
+  // Set campaign to RUNNING
+  await prisma.campaign.update({
+    where: { id: campaign.id },
+    data: { status: 'RUNNING' },
+  });
+
+  // Process in background
+  const retryHeaderMediaUrl = (campaign.targetFilters as any)?.headerMediaUrl;
+  processCampaignMessages(campaign.id, campaign.templateId, failedLeads.map((l) => l.leadId), retryHeaderMediaUrl)
+    .catch((err) => console.error(`Campaign ${campaign.id} retry-failed error:`, err));
+
+  res.json({
+    success: true,
+    message: `Retrying ${failedLeads.length} failed messages.`,
+    data: { retryCount: failedLeads.length },
+  });
+});
+
 // GET /api/campaigns/:id/analytics - Get full analytics for campaign detail page
 router.get('/:id/analytics', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
   const campaign = await prisma.campaign.findUnique({

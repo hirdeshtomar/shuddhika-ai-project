@@ -341,6 +341,41 @@ router.post(
   }
 );
 
+// POST /api/leads/cleanup - Remove all DO_NOT_CONTACT leads (not on WhatsApp, etc.)
+router.post('/cleanup', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
+  const count = await prisma.lead.count({
+    where: { status: 'DO_NOT_CONTACT' },
+  });
+
+  if (count === 0) {
+    res.json({ success: true, message: 'No leads to clean up', data: { deleted: 0 } });
+    return;
+  }
+
+  // Delete related records first (campaign leads, message logs)
+  const doNotContactLeads = await prisma.lead.findMany({
+    where: { status: 'DO_NOT_CONTACT' },
+    select: { id: true },
+  });
+  const leadIds = doNotContactLeads.map((l) => l.id);
+
+  await prisma.campaignLead.deleteMany({
+    where: { leadId: { in: leadIds } },
+  });
+  await prisma.messageLog.deleteMany({
+    where: { leadId: { in: leadIds } },
+  });
+  const result = await prisma.lead.deleteMany({
+    where: { status: 'DO_NOT_CONTACT' },
+  });
+
+  res.json({
+    success: true,
+    message: `Removed ${result.count} Do Not Contact leads`,
+    data: { deleted: result.count },
+  });
+});
+
 // POST /api/leads/bulk-delete - Delete multiple leads
 router.post('/bulk-delete', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
   const { ids } = req.body;

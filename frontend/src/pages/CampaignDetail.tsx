@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Send, CheckCheck, Eye, AlertCircle, Clock, Users, UserX, Play,
+  ArrowLeft, Send, CheckCheck, Eye, AlertCircle, Clock, Users, UserX, Play, RotateCcw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { campaignsApi } from '../services/api';
@@ -29,6 +29,17 @@ export default function CampaignDetail() {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || 'Failed to resend');
+    },
+  });
+
+  const retryFailedMutation = useMutation({
+    mutationFn: () => campaignsApi.retryFailed(id!),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Retrying failed messages...');
+      queryClient.invalidateQueries({ queryKey: ['campaign-analytics', id] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'No retryable failed messages');
     },
   });
 
@@ -79,16 +90,28 @@ export default function CampaignDetail() {
             {campaign.startedAt && ` · Started ${new Date(campaign.startedAt).toLocaleDateString()}`}
           </p>
         </div>
-        {funnel.pending > 0 && (campaign.status === 'RUNNING' || campaign.status === 'PAUSED') && (
-          <button
-            onClick={() => resendMutation.mutate()}
-            disabled={resendMutation.isPending}
-            className="btn btn-primary flex items-center gap-2 text-sm"
-          >
-            <Play size={16} />
-            {resendMutation.isPending ? 'Sending...' : `Send ${funnel.pending} Pending`}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {funnel.pending > 0 && (campaign.status === 'RUNNING' || campaign.status === 'PAUSED') && (
+            <button
+              onClick={() => resendMutation.mutate()}
+              disabled={resendMutation.isPending}
+              className="btn btn-primary flex items-center gap-2 text-sm"
+            >
+              <Play size={16} />
+              {resendMutation.isPending ? 'Sending...' : `Send ${funnel.pending} Pending`}
+            </button>
+          )}
+          {funnel.failed > 0 && (
+            <button
+              onClick={() => retryFailedMutation.mutate()}
+              disabled={retryFailedMutation.isPending}
+              className="btn btn-secondary flex items-center gap-2 text-sm border-red-200 text-red-700 hover:bg-red-50"
+            >
+              <RotateCcw size={16} />
+              {retryFailedMutation.isPending ? 'Retrying...' : `Retry ${funnel.failed} Failed`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Stats Cards */}

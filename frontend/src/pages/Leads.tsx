@@ -11,6 +11,7 @@ import {
   MapPin,
   Building,
   X,
+  UserX,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { leadsApi } from '../services/api';
@@ -56,6 +57,16 @@ export default function Leads() {
     onError: () => toast.error('Failed to delete leads'),
   });
 
+  const cleanupMutation = useMutation({
+    mutationFn: leadsApi.cleanup,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['lead-stats'] });
+      toast.success(data.message || 'Cleanup complete');
+    },
+    onError: () => toast.error('Failed to clean up leads'),
+  });
+
   const leads = data?.data || [];
   const pagination = data?.pagination;
 
@@ -83,6 +94,19 @@ export default function Leads() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => {
+              if (confirm('Remove all "Do Not Contact" leads (not on WhatsApp, opted out, etc.)? This cannot be undone.')) {
+                cleanupMutation.mutate();
+              }
+            }}
+            disabled={cleanupMutation.isPending}
+            className="btn btn-secondary flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50"
+            title="Remove leads not on WhatsApp"
+          >
+            <UserX size={18} />
+            {cleanupMutation.isPending ? 'Cleaning...' : 'Cleanup'}
+          </button>
           <button
             onClick={() => setShowImportModal(true)}
             className="btn btn-secondary flex items-center gap-2"
@@ -134,6 +158,7 @@ export default function Leads() {
             <option value="NEGOTIATING">Negotiating</option>
             <option value="CONVERTED">Converted</option>
             <option value="REJECTED">Rejected</option>
+            <option value="DO_NOT_CONTACT">Do Not Contact</option>
           </select>
         </div>
       </div>

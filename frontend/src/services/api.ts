@@ -125,6 +125,11 @@ export const leadsApi = {
     return data;
   },
 
+  cleanup: async () => {
+    const { data } = await api.post<ApiResponse<{ deleted: number }>>('/leads/cleanup');
+    return data;
+  },
+
   getStats: async () => {
     const { data } = await api.get<ApiResponse<LeadStats>>('/leads/stats');
     return data;
@@ -185,6 +190,11 @@ export const campaignsApi = {
 
   resend: async (id: string) => {
     const { data } = await api.post<ApiResponse<{ pendingCount: number }>>(`/campaigns/${id}/resend`);
+    return data;
+  },
+
+  retryFailed: async (id: string) => {
+    const { data } = await api.post<ApiResponse<{ retryCount: number }>>(`/campaigns/${id}/retry-failed`);
     return data;
   },
 };
