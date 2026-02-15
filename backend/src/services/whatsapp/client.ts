@@ -418,10 +418,14 @@ export async function sendCampaignMessage(
       },
     });
 
-    // Update lead's last contacted time
+    // Update lead's last contacted time and status (NEW → CONTACTED)
+    const updateData: any = { lastContactedAt: new Date() };
+    if (lead.status === 'NEW') {
+      updateData.status = 'CONTACTED';
+    }
     await prisma.lead.update({
       where: { id: leadId },
-      data: { lastContactedAt: new Date() },
+      data: updateData,
     });
   } else {
     await prisma.messageLog.update({

@@ -196,7 +196,7 @@ router.post('/:leadId/send-text', authenticate, async (req: AuthenticatedRequest
 
     await prisma.lead.update({
       where: { id: leadId },
-      data: { lastContactedAt: new Date() },
+      data: { lastContactedAt: new Date(), ...(lead.status === 'NEW' ? { status: 'CONTACTED' } : {}) },
     });
 
     res.json({
@@ -277,7 +277,7 @@ router.post('/:leadId/send-template', authenticate, async (req: AuthenticatedReq
 
     await prisma.lead.update({
       where: { id: leadId },
-      data: { lastContactedAt: new Date() },
+      data: { lastContactedAt: new Date(), ...(lead.status === 'NEW' ? { status: 'CONTACTED' } : {}) },
     });
 
     res.json({
@@ -354,7 +354,7 @@ router.post('/:leadId/send-media', authenticate, upload.single('file'), async (r
 
     await prisma.lead.update({
       where: { id: leadId },
-      data: { lastContactedAt: new Date() },
+      data: { lastContactedAt: new Date(), ...(lead.status === 'NEW' ? { status: 'CONTACTED' } : {}) },
     });
 
     res.json({ success: true, data: updated, message: 'Media message sent' });
