@@ -115,6 +115,82 @@ export class WhatsAppClient {
   }
 
   /**
+   * Upload media to WhatsApp for sending
+   */
+  async uploadMedia(buffer: Buffer, mimeType: string, filename: string): Promise<{
+    mediaId: string;
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      const blob = new Blob([buffer], { type: mimeType });
+      const formData = new FormData();
+      formData.append('file', blob, filename);
+      formData.append('messaging_product', 'whatsapp');
+      formData.append('type', mimeType);
+
+      const response = await fetch(
+        `${env.WHATSAPP_API_URL}/${this.phoneNumberId}/media`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}` },
+          body: formData,
+        }
+      );
+
+      const data = await response.json() as any;
+      if (!response.ok) {
+        throw new Error(data?.error?.message || 'Media upload failed');
+      }
+
+      return { mediaId: data.id, success: true };
+    } catch (error: any) {
+      return { mediaId: '', success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send a media message (image, video, document, audio) within 24hr window
+   */
+  async sendMediaMessage(
+    to: string,
+    mediaId: string,
+    mediaType: 'image' | 'video' | 'document' | 'audio',
+    caption?: string
+  ): Promise<{ messageId: string; success: boolean; error?: string }> {
+    try {
+      const mediaPayload: any = { id: mediaId };
+      if (caption && ['image', 'video', 'document'].includes(mediaType)) {
+        mediaPayload.caption = caption;
+      }
+
+      const payload = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: mediaType,
+        [mediaType]: mediaPayload,
+      };
+
+      const response = await this.client.post(
+        `/${this.phoneNumberId}/messages`,
+        payload
+      );
+
+      return {
+        messageId: response.data?.messages?.[0]?.id || '',
+        success: true,
+      };
+    } catch (error: any) {
+      return {
+        messageId: '',
+        success: false,
+        error: error.response?.data?.error?.message || error.message,
+      };
+    }
+  }
+
+  /**
    * Get all message templates from WhatsApp Business Account
    * Handles pagination to fetch every template across all pages
    */

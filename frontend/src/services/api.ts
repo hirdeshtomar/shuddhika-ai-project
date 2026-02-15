@@ -253,6 +253,18 @@ export const conversationsApi = {
     return data;
   },
 
+  sendMedia: async (leadId: string, file: File, caption?: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (caption) formData.append('caption', caption);
+    const { data } = await api.post<ApiResponse<MessageLogEntry>>(
+      `/conversations/${leadId}/send-media`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return data;
+  },
+
   delete: async (leadId: string) => {
     const { data } = await api.delete<ApiResponse<{ deletedCount: number }>>(`/conversations/${leadId}`);
     return data;

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, ArrowLeft, Send, Clock, Check, CheckCheck, AlertCircle,
-  FileText, X, User, Play, Image, Trash2, ChevronDown, MessageSquare,
+  FileText, X, User, Play, Image, Trash2, ChevronDown, MessageSquare, Paperclip,
 } from 'lucide-react';
 import { conversationsApi, templatesApi } from '../services/api';
 import type { Conversation, MessageLogEntry, MessageStatus, MessageTemplate } from '../types';
@@ -41,6 +41,7 @@ export default function Conversations() {
   const [lastReadSnapshot, setLastReadSnapshot] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Contact list with infinite scroll
   const {
@@ -121,6 +122,27 @@ export default function Conversations() {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
   });
+
+  // Send media message
+  const sendMediaMutation = useMutation({
+    mutationFn: ({ file, caption }: { file: File; caption?: string }) =>
+      conversationsApi.sendMedia(selectedLeadId!, file, caption),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversation-messages', selectedLeadId] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 16 * 1024 * 1024) {
+      alert('File is too large. Maximum size is 16 MB.');
+      return;
+    }
+    sendMediaMutation.mutate({ file });
+    e.target.value = '';
+  };
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -266,8 +288,10 @@ export default function Conversations() {
 
       {/* ─── Right Panel: Chat Thread ─── */}
       <div
-        className={`flex-1 min-w-0 flex flex-col bg-[#e5ddd5] ${
-          selectedLeadId ? 'flex' : 'hidden md:flex'
+        className={`min-w-0 flex flex-col bg-[#e5ddd5] ${
+          selectedLeadId
+            ? 'fixed inset-x-0 top-16 bottom-0 z-20 md:relative md:inset-auto md:z-auto md:flex-1'
+            : 'hidden md:flex md:flex-1'
         }`}
       >
         {!selectedLeadId ? (
@@ -360,6 +384,22 @@ export default function Conversations() {
                   >
                     <FileText size={22} />
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={sendMediaMutation.isPending}
+                    className="p-2.5 text-gray-500 hover:text-primary-600 active:bg-gray-100 rounded-full flex-shrink-0 disabled:opacity-50"
+                    title="Attach file or photo"
+                  >
+                    <Paperclip size={22} />
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,video/*,.pdf,.doc,.docx"
+                    className="hidden"
+                    onChange={handleFileSelect}
+                  />
                   <input
                     type="text"
                     placeholder="Type a message..."
@@ -376,9 +416,17 @@ export default function Conversations() {
                   </button>
                 </form>
               )}
-              {sendTextMutation.isError && (
+              {sendMediaMutation.isPending && (
+                <div className="text-xs text-gray-500 mt-1.5 text-center flex items-center justify-center gap-1.5">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary-600" />
+                  Sending file...
+                </div>
+              )}
+              {(sendTextMutation.isError || sendMediaMutation.isError) && (
                 <p className="text-xs text-red-500 mt-1.5 text-center">
-                  {(sendTextMutation.error as any)?.response?.data?.error || 'Failed to send message'}
+                  {(sendTextMutation.error as any)?.response?.data?.error ||
+                   (sendMediaMutation.error as any)?.response?.data?.error ||
+                   'Failed to send message'}
                 </p>
               )}
             </div>
@@ -460,12 +508,14 @@ function ChatBubble({ message, isNew }: { message: MessageLogEntry; isNew?: bool
   let mediaUrl: string | undefined;
   let mediaType: string | undefined;
 
+  let filename: string | undefined;
   if (message.content && message.content.startsWith('{')) {
     try {
       const parsed = JSON.parse(message.content);
       textContent = parsed.text || message.template?.bodyText || '[Message]';
       mediaUrl = parsed.mediaUrl;
       mediaType = parsed.mediaType;
+      filename = parsed.filename;
     } catch { /* not JSON, use as-is */ }
   }
 
@@ -493,12 +543,17 @@ function ChatBubble({ message, isNew }: { message: MessageLogEntry; isNew?: bool
         ) : mediaType === 'VIDEO' ? (
           <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2">
             <Play size={16} className="text-gray-600" />
-            <span className="text-xs text-gray-600">Video message</span>
+            <span className="text-xs text-gray-600">{filename || 'Video message'}</span>
           </div>
         ) : mediaType === 'IMAGE' ? (
           <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2">
             <Image size={16} className="text-gray-600" />
-            <span className="text-xs text-gray-600">Image message</span>
+            <span className="text-xs text-gray-600">{filename || 'Image message'}</span>
+          </div>
+        ) : mediaType === 'DOCUMENT' ? (
+          <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2">
+            <FileText size={16} className="text-gray-600" />
+            <span className="text-xs text-gray-600">{filename || 'Document'}</span>
           </div>
         ) : null}
         <p className="whitespace-pre-wrap break-words overflow-hidden">{textContent}</p>

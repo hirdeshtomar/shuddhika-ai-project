@@ -5,8 +5,14 @@ import { authenticate } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest, ApiResponse } from '../types/index.js';
 import { whatsappClient } from '../services/whatsapp/client.js';
+import multer from 'multer';
 
 const router = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 16 * 1024 * 1024 },
+});
 
 const sendTextSchema = z.object({
   text: z.string().min(1, 'Message text is required').max(4096),
@@ -290,6 +296,82 @@ router.post('/:leadId/send-template', authenticate, async (req: AuthenticatedReq
     });
 
     throw new AppError(`Failed to send template message: ${result.error}`, 400);
+  }
+});
+
+// POST /api/conversations/:leadId/send-media - Send a media message (image, video, doc)
+router.post('/:leadId/send-media', authenticate, upload.single('file'), async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
+  const leadId = req.params.leadId!;
+  const file = (req as any).file as Express.Multer.File | undefined;
+  const caption = req.body?.caption || '';
+
+  if (!file) throw new AppError('No file uploaded', 400);
+
+  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+  if (!lead) throw new AppError('Lead not found', 404);
+  if (lead.optedOut) throw new AppError('Cannot send messages to opted-out leads', 400);
+
+  // Determine WhatsApp media type
+  let mediaType: 'image' | 'video' | 'document' | 'audio';
+  if (file.mimetype.startsWith('image/')) mediaType = 'image';
+  else if (file.mimetype.startsWith('video/')) mediaType = 'video';
+  else if (file.mimetype.startsWith('audio/')) mediaType = 'audio';
+  else mediaType = 'document';
+
+  // Upload to WhatsApp
+  const uploadResult = await whatsappClient.uploadMedia(file.buffer, file.mimetype, file.originalname);
+  if (!uploadResult.success) {
+    throw new AppError(`Media upload failed: ${uploadResult.error}`, 400);
+  }
+
+  // Create message log
+  const messageLog = await prisma.messageLog.create({
+    data: {
+      leadId,
+      channel: 'WHATSAPP',
+      direction: 'OUTBOUND',
+      content: JSON.stringify({
+        text: caption || file.originalname,
+        mediaType: mediaType.toUpperCase(),
+        filename: file.originalname,
+      }),
+      status: 'PENDING',
+    },
+  });
+
+  // Send media message
+  const result = await whatsappClient.sendMediaMessage(lead.phone, uploadResult.mediaId, mediaType, caption || undefined);
+
+  if (result.success) {
+    const updated = await prisma.messageLog.update({
+      where: { id: messageLog.id },
+      data: {
+        whatsappMessageId: result.messageId,
+        status: 'SENT',
+        sentAt: new Date(),
+      },
+    });
+
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { lastContactedAt: new Date() },
+    });
+
+    res.json({ success: true, data: updated, message: 'Media message sent' });
+  } else {
+    await prisma.messageLog.update({
+      where: { id: messageLog.id },
+      data: {
+        status: 'FAILED',
+        failedAt: new Date(),
+        errorMessage: result.error,
+      },
+    });
+
+    throw new AppError(
+      `Failed to send media: ${result.error}. Note: Media messages only work within the 24-hour window.`,
+      400
+    );
   }
 });
 
