@@ -139,6 +139,11 @@ export const leadsApi = {
     const { data } = await api.get<ApiResponse<string[]>>('/leads/cities');
     return data;
   },
+
+  backfillContacted: async () => {
+    const { data } = await api.post<ApiResponse<{ updated: number }>>('/leads/backfill-contacted');
+    return data;
+  },
 };
 
 // Campaigns

@@ -12,6 +12,7 @@ import {
   Building,
   X,
   UserX,
+  RefreshCw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { leadsApi } from '../services/api';
@@ -67,6 +68,16 @@ export default function Leads() {
     onError: () => toast.error('Failed to clean up leads'),
   });
 
+  const backfillMutation = useMutation({
+    mutationFn: leadsApi.backfillContacted,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      queryClient.invalidateQueries({ queryKey: ['lead-stats'] });
+      toast.success(data.message || 'Status updated');
+    },
+    onError: () => toast.error('Failed to update lead statuses'),
+  });
+
   const leads = data?.data || [];
   const pagination = data?.pagination;
 
@@ -94,6 +105,19 @@ export default function Leads() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => {
+              if (confirm('Update all leads with sent messages from NEW to CONTACTED?')) {
+                backfillMutation.mutate();
+              }
+            }}
+            disabled={backfillMutation.isPending}
+            className="btn btn-secondary flex items-center gap-2"
+            title="Fix status for leads already contacted"
+          >
+            <RefreshCw size={18} className={backfillMutation.isPending ? 'animate-spin' : ''} />
+            {backfillMutation.isPending ? 'Updating...' : 'Fix Status'}
+          </button>
           <button
             onClick={() => {
               if (confirm('Remove all "Do Not Contact" leads (not on WhatsApp, opted out, etc.)? This cannot be undone.')) {
