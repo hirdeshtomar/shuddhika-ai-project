@@ -22,24 +22,28 @@ export default function Dashboard() {
       value: dashboardStats?.totalLeads || 0,
       icon: Users,
       color: 'bg-blue-500',
+      href: '/leads',
     },
     {
       name: 'New Leads',
       value: dashboardStats?.newLeads || 0,
       icon: TrendingUp,
       color: 'bg-green-500',
+      href: '/leads',
     },
     {
       name: 'Active Campaigns',
       value: dashboardStats?.activeCampaigns || 0,
       icon: Megaphone,
       color: 'bg-purple-500',
+      href: '/campaigns',
     },
     {
       name: 'Messages Sent',
       value: dashboardStats?.messagesSent || 0,
       icon: MessageSquare,
       color: 'bg-primary-500',
+      href: '/conversations',
     },
   ];
 
@@ -54,21 +58,24 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {statCards.map((stat) => (
-          <div key={stat.name} className="card p-6">
-            <div className="flex items-center gap-4">
-              <div
-                className={`${stat.color} w-12 h-12 rounded-lg flex items-center justify-center`}
-              >
-                <stat.icon className="text-white" size={24} />
+        {statCards.map((stat) => {
+          const Wrapper = stat.href ? 'a' : 'div';
+          return (
+            <Wrapper key={stat.name} href={stat.href} className={`card p-6 ${stat.href ? 'hover:ring-2 hover:ring-primary-200 transition-shadow cursor-pointer' : ''}`}>
+              <div className="flex items-center gap-4">
+                <div
+                  className={`${stat.color} w-12 h-12 rounded-lg flex items-center justify-center`}
+                >
+                  <stat.icon className="text-white" size={24} />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">{stat.name}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-500">{stat.name}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-              </div>
-            </div>
-          </div>
-        ))}
+            </Wrapper>
+          );
+        })}
       </div>
 
       {/* Lead Status Breakdown */}
@@ -124,7 +131,7 @@ export default function Dashboard() {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           Quick Actions
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <a
             href="/leads"
             className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
@@ -143,6 +150,16 @@ export default function Dashboard() {
             <div>
               <p className="font-medium text-gray-900">Create Campaign</p>
               <p className="text-sm text-gray-500">Start a new outreach</p>
+            </div>
+          </a>
+          <a
+            href="/conversations"
+            className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <MessageSquare className="text-primary-500" size={24} />
+            <div>
+              <p className="font-medium text-gray-900">Conversations</p>
+              <p className="text-sm text-gray-500">Chat with your leads</p>
             </div>
           </a>
           <a
