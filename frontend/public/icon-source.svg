@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Main background gradient: rich green to teal -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#059669"/>
+      <stop offset="50%" style="stop-color:#10b981"/>
+      <stop offset="100%" style="stop-color:#0d9488"/>
+    </linearGradient>
+    <!-- Golden accent gradient -->
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:0.35"/>
+      <stop offset="100%" style="stop-color:#eab308;stop-opacity:0"/>
+    </linearGradient>
+    <!-- Subtle inner shadow -->
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.2"/>
+    </filter>
+    <!-- Text shadow -->
+    <filter id="tshadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#064e3b" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="url(#bg)"/>
+
+  <!-- Subtle golden accent arc (top-right glow) -->
+  <ellipse cx="380" cy="130" rx="200" ry="180" fill="url(#gold)"/>
+
+  <!-- Decorative leaf/drop motif (subtle, top-right) -->
+  <path d="M 390 60 Q 430 90 420 140 Q 400 110 370 100 Q 380 70 390 60 Z" fill="rgba(255,255,255,0.12)"/>
+
+  <!-- Bold stylized S -->
+  <text
+    x="256"
+    y="340"
+    text-anchor="middle"
+    font-family="-apple-system, 'SF Pro Display', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+    font-weight="800"
+    font-size="320"
+    fill="white"
+    filter="url(#tshadow)"
+    letter-spacing="-10"
+  >S</text>
+
+  <!-- Thin golden line accent at bottom -->
+  <rect x="160" y="420" width="192" height="4" rx="2" fill="#fbbf24" opacity="0.6"/>
+</svg>
