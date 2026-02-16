@@ -258,7 +258,9 @@ router.post('/sync', authenticate, async (req: AuthenticatedRequest, res: Respon
         : 'PENDING_APPROVAL';
 
     if (existing) {
-      // Update existing template — sync language, header, body from WhatsApp
+      // Update existing template — sync language, header, status from WhatsApp
+      // NOTE: Do NOT overwrite bodyText/content — WhatsApp API returns {{1}} format
+      // but the original DB entry has the correct named variables (e.g., {{name}})
       const updateData: any = {
         whatsappTemplateId: waTemplate.id,
         whatsappTemplateName: waTemplate.name,
@@ -266,13 +268,10 @@ router.post('/sync', authenticate, async (req: AuthenticatedRequest, res: Respon
         status,
       };
 
-      // Also sync components if available
+      // Only sync header type/format (not bodyText which has correct variable names)
       if (waTemplate.components) {
         for (const component of waTemplate.components) {
-          if (component.type === 'BODY' && component.text) {
-            updateData.bodyText = component.text;
-            updateData.content = component.text;
-          } else if (component.type === 'FOOTER') {
+          if (component.type === 'FOOTER') {
             updateData.footerText = component.text || null;
           } else if (component.type === 'HEADER') {
             updateData.headerType = component.format || 'TEXT';
