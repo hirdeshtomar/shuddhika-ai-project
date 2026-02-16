@@ -35,7 +35,7 @@ export default function Campaigns() {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       toast.success(data.message || 'Campaign started');
     },
-    onError: () => toast.error('Failed to start campaign'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to start campaign'),
   });
 
   const pauseMutation = useMutation({
@@ -44,7 +44,7 @@ export default function Campaigns() {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       toast.success('Campaign paused');
     },
-    onError: () => toast.error('Failed to pause campaign'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to pause campaign'),
   });
 
   const deleteMutation = useMutation({
@@ -53,7 +53,7 @@ export default function Campaigns() {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       toast.success('Campaign deleted');
     },
-    onError: () => toast.error('Failed to delete campaign'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to delete campaign'),
   });
 
   const campaigns = data?.data || [];
@@ -259,7 +259,7 @@ function CreateCampaignModal({
       toast.success('Campaign created');
       onClose();
     },
-    onError: () => toast.error('Failed to create campaign'),
+    onError: (err: any) => toast.error(err?.response?.data?.error || 'Failed to create campaign'),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
