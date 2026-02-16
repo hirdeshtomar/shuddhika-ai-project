@@ -29,19 +29,28 @@ export class WhatsAppClient {
     errorCode?: number;
   }> {
     try {
+      const template: any = {
+        name: request.templateName,
+        language: {
+          code: request.languageCode,
+        },
+      };
+
+      // Only include components if there are actual components to send
+      // Sending components: [] causes (#100) Invalid parameter
+      if (request.components && request.components.length > 0) {
+        template.components = request.components;
+      }
+
       const payload = {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
         to: request.to,
         type: 'template',
-        template: {
-          name: request.templateName,
-          language: {
-            code: request.languageCode,
-          },
-          components: request.components || [],
-        },
+        template,
       };
+
+      console.log('[WhatsApp] Sending payload:', JSON.stringify(payload, null, 2));
 
       const response = await this.client.post(
         `/${this.phoneNumberId}/messages`,
@@ -371,8 +380,9 @@ export async function sendCampaignMessage(
 
       resolvedBodyParams = allVars.map((v) => {
         const key = v.replace(/\{|\}/g, '').toLowerCase();
+        // WhatsApp rejects empty string parameters — always use a fallback
         return fieldMap[key] || lead.name || 'there';
-      });
+      }).map((p) => p || 'N/A');
     }
   }
 
@@ -400,6 +410,7 @@ export async function sendCampaignMessage(
 
   // Send message
   const components = whatsappClient.buildTemplateComponents(resolvedBodyParams, headerParams);
+  console.log(`[Campaign] Lead ${leadId} | Template: ${template.whatsappTemplateName} | Body params: ${JSON.stringify(resolvedBodyParams)} | Header: ${JSON.stringify(headerParams)} | Components: ${JSON.stringify(components)}`);
   const result = await whatsappClient.sendTemplateMessage({
     to: lead.phone,
     templateName: template.whatsappTemplateName,
