@@ -258,17 +258,35 @@ router.post('/sync', authenticate, async (req: AuthenticatedRequest, res: Respon
         : 'PENDING_APPROVAL';
 
     if (existing) {
-      // Update existing template
+      // Update existing template — sync language, header, body from WhatsApp
+      const updateData: any = {
+        whatsappTemplateId: waTemplate.id,
+        whatsappTemplateName: waTemplate.name,
+        language: waTemplate.language || existing.language,
+        status,
+      };
+
+      // Also sync components if available
+      if (waTemplate.components) {
+        for (const component of waTemplate.components) {
+          if (component.type === 'BODY' && component.text) {
+            updateData.bodyText = component.text;
+            updateData.content = component.text;
+          } else if (component.type === 'FOOTER') {
+            updateData.footerText = component.text || null;
+          } else if (component.type === 'HEADER') {
+            updateData.headerType = component.format || 'TEXT';
+            if (component.text) updateData.headerContent = component.text;
+          }
+        }
+      }
+
       await prisma.messageTemplate.update({
         where: { id: existing.id },
-        data: {
-          whatsappTemplateId: waTemplate.id,
-          whatsappTemplateName: waTemplate.name,
-          status,
-        },
+        data: updateData,
       });
       synced++;
-      console.log(`Updated: ${waTemplate.name} (${status})`);
+      console.log(`Updated: ${waTemplate.name} (${status}, lang: ${waTemplate.language})`);
     } else {
       // Import new template from WhatsApp
       // Extract body text from components

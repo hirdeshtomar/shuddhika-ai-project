@@ -70,11 +70,7 @@ export class WhatsAppClient {
         error.message ||
         'Unknown error sending WhatsApp message';
 
-      console.error('WhatsApp API Error:', {
-        status: error.response?.status,
-        code: errorCode,
-        message: errorMessage,
-      });
+      console.error('WhatsApp API Error:', JSON.stringify(error.response?.data, null, 2));
 
       return {
         messageId: '',
