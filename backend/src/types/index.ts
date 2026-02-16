@@ -100,6 +100,7 @@ export interface WhatsAppTemplateComponent {
 
 export interface WhatsAppParameter {
   type: 'text' | 'image' | 'video' | 'document';
+  parameter_name?: string;
   text?: string;
   image?: { link: string };
   video?: { link: string };

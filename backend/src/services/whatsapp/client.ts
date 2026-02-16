@@ -271,9 +271,10 @@ export class WhatsAppClient {
 
   /**
    * Build template components with parameters
+   * bodyParams: Array of { name, value } where name is the variable name from the template
    */
   buildTemplateComponents(
-    bodyParams: string[],
+    bodyParams: Array<{ name: string; value: string }>,
     headerParams?: { type: 'text' | 'image' | 'video'; value: string },
     buttons?: Array<{ type: 'quick_reply' | 'url'; payload?: string }>
   ): WhatsAppTemplateComponent[] {
@@ -297,11 +298,15 @@ export class WhatsAppClient {
       components.push(headerComponent);
     }
 
-    // Body component with positional parameters (WhatsApp matches by order)
+    // Body component with named parameters (WhatsApp requires parameter_name)
     if (bodyParams.length > 0) {
       components.push({
         type: 'body',
-        parameters: bodyParams.map((text) => ({ type: 'text', text })),
+        parameters: bodyParams.map((param) => ({
+          type: 'text',
+          parameter_name: param.name,
+          text: param.value,
+        })),
       });
     }
 
@@ -355,8 +360,8 @@ export async function sendCampaignMessage(
   }
 
   // Auto-fill body params from lead data when none provided
-  // WhatsApp matches template parameters by POSITION, so we always send plain strings
-  let resolvedBodyParams: string[] = bodyParams;
+  // WhatsApp requires parameter_name for named variables ({{name}}, {{1}}, etc.)
+  let resolvedBodyParams: Array<{ name: string; value: string }> = bodyParams.map((v, i) => ({ name: String(i + 1), value: v }));
   if (bodyParams.length === 0 && template.bodyText) {
     // Extract all variables in order (both {{1}} and {{name}} styles)
     const allVars = template.bodyText.match(/\{\{[^}]+\}\}/g) || [];
@@ -376,9 +381,9 @@ export async function sendCampaignMessage(
 
       resolvedBodyParams = allVars.map((v) => {
         const key = v.replace(/\{|\}/g, '').toLowerCase();
-        // WhatsApp rejects empty string parameters — always use a fallback
-        return fieldMap[key] || lead.name || 'there';
-      }).map((p) => p || 'N/A');
+        const value = fieldMap[key] || lead.name || 'there';
+        return { name: key, value: value || 'N/A' };
+      });
     }
   }
 

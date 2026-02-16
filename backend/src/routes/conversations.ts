@@ -257,7 +257,14 @@ router.post('/:leadId/send-template', authenticate, async (req: AuthenticatedReq
     headerParams = { type: 'video', value: mediaUrl };
   }
 
-  const components = whatsappClient.buildTemplateComponents(bodyParams, headerParams);
+  // Extract variable names from template body to build named params
+  const allVars = template.bodyText.match(/\{\{[^}]+\}\}/g) || [];
+  const namedBodyParams = bodyParams.map((value, i) => ({
+    name: allVars[i] ? allVars[i].replace(/\{|\}/g, '').toLowerCase() : String(i + 1),
+    value: value || 'N/A',
+  }));
+
+  const components = whatsappClient.buildTemplateComponents(namedBodyParams, headerParams);
   const result = await whatsappClient.sendTemplateMessage({
     to: lead.phone,
     templateName: template.whatsappTemplateName,
