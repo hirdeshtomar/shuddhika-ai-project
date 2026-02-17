@@ -222,6 +222,7 @@ function CreateCampaignModal({
   const [cityFilter, setCityFilter] = useState('');
   const [headerMediaUrl, setHeaderMediaUrl] = useState(SAVED_MEDIA[0]?.url || '');
   const [skipDuplicate, setSkipDuplicate] = useState(true);
+  const [sendingSpeed, setSendingSpeed] = useState<string>('slow');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -277,6 +278,7 @@ function CreateCampaignModal({
       description: formData.description,
       templateId: formData.templateId,
       skipDuplicateTemplate: skipDuplicate,
+      sendingSpeed,
     };
     if (needsMediaUrl && headerMediaUrl.trim()) {
       payload.headerMediaUrl = headerMediaUrl.trim();
@@ -639,6 +641,26 @@ function CreateCampaignModal({
               </p>
             </div>
           </label>
+
+          {/* Sending Speed */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Sending Speed
+            </label>
+            <select
+              className="input"
+              value={sendingSpeed}
+              onChange={(e) => setSendingSpeed(e.target.value)}
+            >
+              <option value="fast">Fast — 1 msg every 5s (risky, may get throttled)</option>
+              <option value="normal">Normal — 1 msg every 30s</option>
+              <option value="slow">Slow — 1 msg every 5 min (recommended)</option>
+              <option value="very_slow">Very Slow — 1 msg every 10 min (safest)</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Slower speeds avoid Meta throttling errors. Use "Slow" or "Very Slow" for new WhatsApp accounts.
+            </p>
+          </div>
 
           <div className="flex justify-end gap-2 pt-4">
             <button type="button" onClick={onClose} className="btn btn-secondary">

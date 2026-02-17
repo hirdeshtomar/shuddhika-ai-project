@@ -9,6 +9,14 @@ import { sendCampaignMessage } from '../services/whatsapp/client.js';
 const router = Router();
 
 // Validation schemas
+// Sending speed presets (delay in ms between messages)
+const SENDING_SPEEDS: Record<string, { delayMs: number; label: string }> = {
+  fast: { delayMs: 5_000, label: '1 per 5s' },        // ~12/min — risky for new numbers
+  normal: { delayMs: 30_000, label: '1 per 30s' },     // ~2/min — safe for most accounts
+  slow: { delayMs: 300_000, label: '1 per 5min' },     // safe for new/low-tier numbers
+  very_slow: { delayMs: 600_000, label: '1 per 10min' }, // safest, for accounts with issues
+};
+
 const createCampaignSchema = z.object({
   name: z.string().min(1, 'Campaign name is required'),
   description: z.string().optional(),
@@ -17,6 +25,7 @@ const createCampaignSchema = z.object({
   leadIds: z.array(z.string()).optional(),
   headerMediaUrl: z.string().url().optional(),
   skipDuplicateTemplate: z.boolean().default(true),
+  sendingSpeed: z.enum(['fast', 'normal', 'slow', 'very_slow']).default('normal'),
   targetFilters: z.object({
     status: z.array(z.string()).optional(),
     source: z.array(z.string()).optional(),
@@ -203,6 +212,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response<A
         ...(data.leadIds?.length ? { leadIds: data.leadIds } : data.targetFilters),
         ...(data.headerMediaUrl ? { headerMediaUrl: data.headerMediaUrl } : {}),
         skipDuplicateTemplate: data.skipDuplicateTemplate !== false,
+        sendingSpeed: data.sendingSpeed || 'normal',
       },
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
       status: data.scheduledAt ? 'SCHEDULED' : 'DRAFT',
@@ -331,7 +341,8 @@ router.post('/:id/start', authenticate, async (req: AuthenticatedRequest, res: R
   // Send messages in the background (non-blocking)
   // Respond immediately, process sends asynchronously
   const headerMediaUrl = (campaign.targetFilters as any)?.headerMediaUrl;
-  processCampaignMessages(campaign.id, campaign.templateId, leads.map(l => l.id), headerMediaUrl)
+  const sendingSpeed = (campaign.targetFilters as any)?.sendingSpeed || 'normal';
+  processCampaignMessages(campaign.id, campaign.templateId, leads.map(l => l.id), headerMediaUrl, sendingSpeed)
     .catch(err => console.error(`Campaign ${campaign.id} send error:`, err));
 
   res.json({
@@ -418,7 +429,8 @@ router.post('/:id/resend', authenticate, async (req: AuthenticatedRequest, res: 
 
   // Process in background
   const resendHeaderMediaUrl = (campaign.targetFilters as any)?.headerMediaUrl;
-  processCampaignMessages(campaign.id, campaign.templateId, pendingLeads.map(l => l.leadId), resendHeaderMediaUrl)
+  const resendSpeed = (campaign.targetFilters as any)?.sendingSpeed || 'normal';
+  processCampaignMessages(campaign.id, campaign.templateId, pendingLeads.map(l => l.leadId), resendHeaderMediaUrl, resendSpeed)
     .catch(err => console.error(`Campaign ${campaign.id} resend error:`, err));
 
   res.json({
@@ -475,7 +487,8 @@ router.post('/:id/retry-failed', authenticate, async (req: AuthenticatedRequest,
 
   // Process in background
   const retryHeaderMediaUrl = (campaign.targetFilters as any)?.headerMediaUrl;
-  processCampaignMessages(campaign.id, campaign.templateId, failedLeads.map((l) => l.leadId), retryHeaderMediaUrl)
+  const retrySpeed = (campaign.targetFilters as any)?.sendingSpeed || 'normal';
+  processCampaignMessages(campaign.id, campaign.templateId, failedLeads.map((l) => l.leadId), retryHeaderMediaUrl, retrySpeed)
     .catch((err) => console.error(`Campaign ${campaign.id} retry-failed error:`, err));
 
   res.json({
@@ -618,14 +631,16 @@ async function processCampaignMessages(
   campaignId: string,
   templateId: string,
   leadIds: string[],
-  headerMediaUrl?: string
+  headerMediaUrl?: string,
+  sendingSpeed: string = 'normal'
 ): Promise<void> {
-  console.log(`[Campaign ${campaignId}] Starting to send ${leadIds.length} messages`);
+  const BASE_DELAY = (SENDING_SPEEDS[sendingSpeed] ?? SENDING_SPEEDS['normal']!).delayMs;
+  const MAX_RETRIES = 2; // retry throttled messages up to 2 times
+
+  console.log(`[Campaign ${campaignId}] Starting to send ${leadIds.length} messages (speed: ${sendingSpeed}, delay: ${BASE_DELAY / 1000}s)`);
   let sent = 0;
   let failed = 0;
   let throttleBackoff = 0; // escalating backoff for consecutive 131049 errors
-  const BASE_DELAY = 5000; // 5s between messages (WhatsApp-safe)
-  const MAX_RETRIES = 2; // retry throttled messages up to 2 times
 
   for (const leadId of leadIds) {
     // Check if campaign is still running (allows pause/cancel)
@@ -654,7 +669,7 @@ async function processCampaignMessages(
         // 131049 throttle — exponential backoff then retry
         attempts++;
         throttleBackoff = Math.min(throttleBackoff + 1, 5);
-        const waitTime = 15000 * throttleBackoff; // 15s, 30s, 45s, 60s, 75s
+        const waitTime = Math.max(BASE_DELAY, 30000) * throttleBackoff;
         console.log(`[Campaign ${campaignId}] Throttled (131049) for lead ${leadId} — retry ${attempts}/${MAX_RETRIES} after ${waitTime / 1000}s`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
@@ -694,8 +709,8 @@ async function processCampaignMessages(
       });
     }
 
-    // Rate limit: 5s base + random jitter (0-2s) to appear natural
-    const jitter = Math.floor(Math.random() * 2000);
+    // Rate limit: configured delay + random jitter (up to 10% of delay) to appear natural
+    const jitter = Math.floor(Math.random() * Math.max(BASE_DELAY * 0.1, 2000));
     await new Promise(resolve => setTimeout(resolve, BASE_DELAY + jitter));
   }
 

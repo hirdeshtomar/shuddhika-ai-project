@@ -64,6 +64,7 @@ export interface CreateCampaignInput {
   leadIds?: string[];
   headerMediaUrl?: string;
   skipDuplicateTemplate?: boolean;
+  sendingSpeed?: 'fast' | 'normal' | 'slow' | 'very_slow';
   targetFilters?: {
     status?: string[];
     source?: string[];
