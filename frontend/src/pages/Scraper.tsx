@@ -112,7 +112,8 @@ export default function Scraper() {
   const jobs = jobsData || [];
   const isSearching = scrapeMutation.isPending || deepScrapeMutation.isPending;
   const deepSearchCities = suggestions?.deepSearchCities || [];
-  const canDeepSearch = deepSearchCities.includes(location);
+  const hasPresetAreas = deepSearchCities.includes(location);
+  const canDeepSearch = !!location.trim(); // Deep search works for any city now
   const lastResult = scrapeMutation.data || deepScrapeMutation.data;
 
   return (
@@ -193,16 +194,12 @@ export default function Scraper() {
             </div>
             {suggestions?.cities && (
               <div className="flex flex-wrap gap-1 mt-2">
-                {suggestions.cities.slice(0, 8).map((city) => (
+                {suggestions.cities.slice(0, 16).map((city) => (
                   <button
                     key={city}
                     type="button"
                     onClick={() => setLocation(city)}
-                    className={`text-xs px-2 py-1 rounded-full ${
-                      deepSearchCities.includes(city)
-                        ? 'bg-primary-100 hover:bg-primary-200 text-primary-700'
-                        : 'bg-gray-100 hover:bg-gray-200'
-                    }`}
+                    className="text-xs px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200"
                   >
                     {city}
                   </button>
@@ -233,9 +230,9 @@ export default function Scraper() {
 
           <button
             onClick={() => deepScrapeMutation.mutate()}
-            disabled={!isConfigured || isSearching || !query || !location || !canDeepSearch}
+            disabled={!isConfigured || isSearching || !query || !canDeepSearch}
             className="btn bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={canDeepSearch ? `Search across multiple areas in ${location}` : `Deep search available for: ${deepSearchCities.join(', ')}`}
+            title={`Search across multiple areas in ${location}`}
           >
             {deepScrapeMutation.isPending ? (
               <>
@@ -264,7 +261,7 @@ export default function Scraper() {
 
         {canDeepSearch && !isSearching && (
           <p className="text-xs text-gray-400 mt-2">
-            Deep Search searches across 10-15 neighborhoods in {location} to find hundreds of leads
+            Deep Search searches across {hasPresetAreas ? '8-15 neighborhoods' : '10 areas'} in {location} to find more leads
           </p>
         )}
       </div>

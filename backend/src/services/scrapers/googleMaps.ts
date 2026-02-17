@@ -172,7 +172,7 @@ function extractBusinessType(types?: string[]): string {
 function extractCity(address?: string): string | null {
   if (!address) return null;
 
-  // Common Indian cities
+  // Indian cities (all tiers)
   const cities = [
     'Delhi', 'Mumbai', 'Bangalore', 'Bengaluru', 'Chennai', 'Kolkata',
     'Hyderabad', 'Pune', 'Ahmedabad', 'Jaipur', 'Lucknow', 'Kanpur',
@@ -182,6 +182,8 @@ function extractCity(address?: string): string | null {
     'Amritsar', 'Allahabad', 'Ranchi', 'Howrah', 'Coimbatore', 'Jabalpur',
     'Gwalior', 'Vijayawada', 'Jodhpur', 'Madurai', 'Raipur', 'Kota',
     'Chandigarh', 'Guwahati', 'Solapur', 'Noida', 'Gurugram', 'Gurgaon',
+    'Dehradun', 'Mysore', 'Mysuru', 'Mangalore', 'Mangaluru',
+    'Thiruvananthapuram', 'Trivandrum', 'Kochi', 'Cochin', 'Bhubaneswar',
   ];
 
   for (const city of cities) {
@@ -317,6 +319,7 @@ export async function scrapeGoogleMaps(
  * Neighborhoods / areas for major Indian cities
  */
 const CITY_AREAS: Record<string, string[]> = {
+  // Tier 1 — Metro cities
   Delhi: [
     'North Delhi', 'South Delhi', 'East Delhi', 'West Delhi', 'Central Delhi',
     'Dwarka Delhi', 'Rohini Delhi', 'Karol Bagh Delhi', 'Lajpat Nagar Delhi',
@@ -370,22 +373,217 @@ const CITY_AREAS: Record<string, string[]> = {
     'Indira Nagar Lucknow', 'Aminabad Lucknow', 'Alambagh Lucknow',
     'Mahanagar Lucknow', 'Chowk Lucknow',
   ],
+  // Tier 2 cities
+  Kanpur: [
+    'Civil Lines Kanpur', 'Swaroop Nagar Kanpur', 'Kidwai Nagar Kanpur',
+    'Govind Nagar Kanpur', 'Kakadeo Kanpur', 'Kalyanpur Kanpur',
+    'Shastri Nagar Kanpur', 'Panki Kanpur',
+  ],
+  Nagpur: [
+    'Sitabuldi Nagpur', 'Dharampeth Nagpur', 'Sadar Nagpur', 'Manewada Nagpur',
+    'Wardha Road Nagpur', 'Hingna Nagpur', 'Lakadganj Nagpur', 'Civil Lines Nagpur',
+  ],
+  Indore: [
+    'Vijay Nagar Indore', 'Palasia Indore', 'Rajwada Indore', 'Bhawarkuan Indore',
+    'Sapna Sangeeta Indore', 'MR 10 Indore', 'Scheme 78 Indore', 'Rau Indore',
+  ],
+  Bhopal: [
+    'MP Nagar Bhopal', 'New Market Bhopal', 'Arera Colony Bhopal', 'Kolar Road Bhopal',
+    'Hoshangabad Road Bhopal', 'Bairagarh Bhopal', 'Shahpura Bhopal', 'Habibganj Bhopal',
+  ],
+  Patna: [
+    'Boring Road Patna', 'Kankarbagh Patna', 'Rajendra Nagar Patna', 'Bailey Road Patna',
+    'Danapur Patna', 'Patna City', 'Phulwari Sharif Patna', 'Saguna More Patna',
+  ],
+  Vadodara: [
+    'Alkapuri Vadodara', 'Fatehgunj Vadodara', 'Manjalpur Vadodara', 'Karelibaug Vadodara',
+    'Gorwa Vadodara', 'Akota Vadodara', 'Waghodia Road Vadodara', 'Sayajigunj Vadodara',
+  ],
+  Ludhiana: [
+    'Civil Lines Ludhiana', 'Model Town Ludhiana', 'Sarabha Nagar Ludhiana',
+    'Dugri Ludhiana', 'Rajguru Nagar Ludhiana', 'BRS Nagar Ludhiana',
+    'Pakhowal Road Ludhiana', 'Ferozepur Road Ludhiana',
+  ],
+  Agra: [
+    'Sanjay Place Agra', 'Kamla Nagar Agra', 'Sikandra Agra', 'Dayal Bagh Agra',
+    'Shahganj Agra', 'Tajganj Agra', 'Khandari Agra', 'Civil Lines Agra',
+  ],
+  Varanasi: [
+    'Lanka Varanasi', 'Sigra Varanasi', 'Godowlia Varanasi', 'Cantt Varanasi',
+    'BHU Varanasi', 'Pandeypur Varanasi', 'Sarnath Varanasi', 'Paharia Varanasi',
+  ],
+  Noida: [
+    'Sector 18 Noida', 'Sector 62 Noida', 'Sector 15 Noida', 'Sector 44 Noida',
+    'Greater Noida', 'Noida Extension', 'Sector 137 Noida', 'Sector 76 Noida',
+  ],
+  Gurugram: [
+    'DLF Phase 1 Gurugram', 'Sohna Road Gurugram', 'Golf Course Road Gurugram',
+    'MG Road Gurugram', 'Sector 29 Gurugram', 'Sector 14 Gurugram',
+    'Palam Vihar Gurugram', 'Manesar Gurugram',
+  ],
+  Ghaziabad: [
+    'Indirapuram Ghaziabad', 'Vaishali Ghaziabad', 'Vasundhara Ghaziabad',
+    'Raj Nagar Ghaziabad', 'Kavi Nagar Ghaziabad', 'Crossing Republik Ghaziabad',
+    'Loni Ghaziabad', 'Mohan Nagar Ghaziabad',
+  ],
+  Faridabad: [
+    'Sector 15 Faridabad', 'NIT Faridabad', 'Ballabhgarh Faridabad',
+    'Sector 21 Faridabad', 'Old Faridabad', 'Sector 37 Faridabad',
+    'Surajkund Faridabad', 'Sector 86 Faridabad',
+  ],
+  Meerut: [
+    'Sadar Bazaar Meerut', 'Pallavpuram Meerut', 'Shastri Nagar Meerut',
+    'Begum Bridge Meerut', 'Ganga Nagar Meerut', 'Cantt Meerut',
+    'Western Kutchery Meerut', 'Hapur Road Meerut',
+  ],
+  Chandigarh: [
+    'Sector 17 Chandigarh', 'Sector 22 Chandigarh', 'Sector 35 Chandigarh',
+    'Sector 43 Chandigarh', 'Panchkula', 'Mohali', 'Zirakpur',
+    'Manimajra Chandigarh',
+  ],
+  Guwahati: [
+    'Paltan Bazaar Guwahati', 'Ganeshguri Guwahati', 'Zoo Road Guwahati',
+    'Maligaon Guwahati', 'Chandmari Guwahati', 'Beltola Guwahati',
+    'GS Road Guwahati', 'Dispur Guwahati',
+  ],
+  Ranchi: [
+    'Main Road Ranchi', 'Doranda Ranchi', 'Lalpur Ranchi', 'Harmu Ranchi',
+    'Bariatu Ranchi', 'Kanke Road Ranchi', 'Namkum Ranchi', 'Ratu Road Ranchi',
+  ],
+  Coimbatore: [
+    'RS Puram Coimbatore', 'Gandhipuram Coimbatore', 'Saibaba Colony Coimbatore',
+    'Peelamedu Coimbatore', 'Singanallur Coimbatore', 'Ukkadam Coimbatore',
+    'Town Hall Coimbatore', 'Ganapathy Coimbatore',
+  ],
+  Vijayawada: [
+    'MG Road Vijayawada', 'Benz Circle Vijayawada', 'Labbipet Vijayawada',
+    'Patamata Vijayawada', 'Moghalrajpuram Vijayawada', 'Auto Nagar Vijayawada',
+    'Governorpet Vijayawada', 'Eluru Road Vijayawada',
+  ],
+  Madurai: [
+    'Anna Nagar Madurai', 'KK Nagar Madurai', 'Goripalayam Madurai',
+    'Periyar Bus Stand Madurai', 'Tallakulam Madurai', 'Mattuthavani Madurai',
+    'Thirunagar Madurai', 'Vilangudi Madurai',
+  ],
+  Raipur: [
+    'Pandri Raipur', 'Shankar Nagar Raipur', 'Telibandha Raipur',
+    'Devendra Nagar Raipur', 'Tatibandh Raipur', 'Amanaka Raipur',
+    'Station Road Raipur', 'Byron Bazar Raipur',
+  ],
+  Jodhpur: [
+    'Paota Jodhpur', 'Sardarpura Jodhpur', 'Ratanada Jodhpur',
+    'Shastri Nagar Jodhpur', 'Basni Jodhpur', 'Chopasni Road Jodhpur',
+    'Station Road Jodhpur', 'Pal Road Jodhpur',
+  ],
+  Kota: [
+    'Talwandi Kota', 'Kunhadi Kota', 'Vigyan Nagar Kota', 'Mahaveer Nagar Kota',
+    'DCM Kota', 'Rangbari Road Kota', 'Nayapura Kota', 'Gumanpura Kota',
+  ],
+  Amritsar: [
+    'Lawrence Road Amritsar', 'Hall Bazaar Amritsar', 'Ranjit Avenue Amritsar',
+    'GT Road Amritsar', 'Mall Road Amritsar', 'White Avenue Amritsar',
+    'Chheharta Amritsar', 'Majitha Road Amritsar',
+  ],
+  Allahabad: [
+    'Civil Lines Allahabad', 'George Town Allahabad', 'Naini Allahabad',
+    'Mumfordganj Allahabad', 'Katra Allahabad', 'Jhunsi Allahabad',
+    'Phaphamau Allahabad', 'Tagore Town Allahabad',
+  ],
+  Jabalpur: [
+    'Napier Town Jabalpur', 'Wright Town Jabalpur', 'Madan Mahal Jabalpur',
+    'Adhartal Jabalpur', 'Vijay Nagar Jabalpur', 'Gorakhpur Jabalpur',
+    'Civil Lines Jabalpur', 'Garha Jabalpur',
+  ],
+  Gwalior: [
+    'City Center Gwalior', 'Lashkar Gwalior', 'Morar Gwalior', 'Thatipur Gwalior',
+    'Maharajpura Gwalior', 'Kampoo Gwalior', 'Dabra Gwalior', 'Hazira Gwalior',
+  ],
+  Nashik: [
+    'College Road Nashik', 'Gangapur Road Nashik', 'Panchavati Nashik',
+    'Satpur Nashik', 'CIDCO Nashik', 'Dwarka Nashik',
+    'Nashik Road', 'Deolali Nashik',
+  ],
+  Rajkot: [
+    'Kalawad Road Rajkot', 'University Road Rajkot', 'Yagnik Road Rajkot',
+    'Bhaktinagar Rajkot', 'Mavdi Rajkot', '150 Feet Ring Road Rajkot',
+    'Amin Marg Rajkot', 'Kalavad Road Rajkot',
+  ],
+  Dhanbad: [
+    'Bank More Dhanbad', 'Hirapur Dhanbad', 'Saraidhela Dhanbad',
+    'Jharia Dhanbad', 'Katras Dhanbad', 'Govindpur Dhanbad',
+    'Sindri Dhanbad', 'Bhuli Dhanbad',
+  ],
+  Aurangabad: [
+    'Cidco Aurangabad', 'Jalna Road Aurangabad', 'Nirala Bazaar Aurangabad',
+    'Osmanpura Aurangabad', 'Shahgunj Aurangabad', 'Cantonment Aurangabad',
+    'Beed Bypass Aurangabad', 'Waluj Aurangabad',
+  ],
+  Srinagar: [
+    'Lal Chowk Srinagar', 'Rajbagh Srinagar', 'Hyderpora Srinagar',
+    'Bemina Srinagar', 'Nowgam Srinagar', 'Soura Srinagar',
+    'Hazratbal Srinagar', 'Dalgate Srinagar',
+  ],
+  Dehradun: [
+    'Rajpur Road Dehradun', 'Clock Tower Dehradun', 'ISBT Dehradun',
+    'Ballupur Dehradun', 'Prem Nagar Dehradun', 'Sahastradhara Road Dehradun',
+    'Race Course Dehradun', 'Rispana Dehradun',
+  ],
+  Mysore: [
+    'Saraswathipuram Mysore', 'Vijayanagar Mysore', 'Kuvempunagar Mysore',
+    'Jayalakshmipuram Mysore', 'Hebbal Mysore', 'Bogadi Mysore',
+    'Nazarbad Mysore', 'Gokulam Mysore',
+  ],
+  Mangalore: [
+    'Hampankatta Mangalore', 'Kankanady Mangalore', 'Bejai Mangalore',
+    'Kadri Mangalore', 'Falnir Mangalore', 'Surathkal Mangalore',
+    'Derebail Mangalore', 'Pumpwell Mangalore',
+  ],
+  Thiruvananthapuram: [
+    'MG Road Thiruvananthapuram', 'Kowdiar Thiruvananthapuram', 'Kazhakootam Thiruvananthapuram',
+    'Pattom Thiruvananthapuram', 'Vazhuthacaud Thiruvananthapuram',
+    'Kesavadasapuram Thiruvananthapuram', 'Sreekaryam Thiruvananthapuram',
+    'Thampanoor Thiruvananthapuram',
+  ],
+  Kochi: [
+    'MG Road Kochi', 'Edappally Kochi', 'Kaloor Kochi', 'Palarivattom Kochi',
+    'Kakkanad Kochi', 'Tripunithura Kochi', 'Aluva Kochi', 'Vytilla Kochi',
+  ],
+  Bhubaneswar: [
+    'Saheed Nagar Bhubaneswar', 'Unit 1 Bhubaneswar', 'Patia Bhubaneswar',
+    'Chandrasekharpur Bhubaneswar', 'Jaydev Vihar Bhubaneswar',
+    'Nayapalli Bhubaneswar', 'Khandagiri Bhubaneswar', 'Rasulgarh Bhubaneswar',
+  ],
+  Visakhapatnam: [
+    'Dwaraka Nagar Visakhapatnam', 'MVP Colony Visakhapatnam', 'Gajuwaka Visakhapatnam',
+    'Seethammadhara Visakhapatnam', 'Madhurawada Visakhapatnam',
+    'Pendurthi Visakhapatnam', 'NAD Junction Visakhapatnam', 'Beach Road Visakhapatnam',
+  ],
 };
+
+/**
+ * Generate fallback area search queries for cities without predefined neighborhoods.
+ * Uses compass directions and common area patterns that work with Google Places.
+ */
+function generateFallbackAreas(city: string): string[] {
+  return [
+    `North ${city}`, `South ${city}`, `East ${city}`, `West ${city}`,
+    `Central ${city}`, `${city} Main Market`, `${city} Old City`,
+    `${city} Railway Station area`, `${city} Bus Stand area`,
+    `${city} Industrial Area`,
+  ];
+}
 
 /**
  * Deep search: Search across multiple neighborhoods in a city.
  * Gets significantly more leads by covering different areas.
+ * Works for ALL cities — uses predefined neighborhoods for known cities,
+ * and auto-generated compass-direction areas for others.
  */
 export async function scrapeGoogleMapsDeep(
   query: string,
   city: string
 ): Promise<SearchResult> {
-  const areas = CITY_AREAS[city];
-
-  // If no neighborhood data, fall back to single search
-  if (!areas || areas.length === 0) {
-    return scrapeGoogleMaps(query, city);
-  }
+  const areas = CITY_AREAS[city] || generateFallbackAreas(city);
 
   const result: SearchResult = {
     leadsFound: 0,
@@ -496,14 +694,22 @@ export function getSuggestedSearches(): Array<{ query: string; description: stri
 }
 
 /**
- * Get list of major Indian cities for targeting
+ * Get list of Indian cities for targeting (all tiers)
  */
 export function getIndianCities(): string[] {
   return [
+    // Tier 1
     'Delhi', 'Mumbai', 'Bangalore', 'Chennai', 'Kolkata',
     'Hyderabad', 'Pune', 'Ahmedabad', 'Jaipur', 'Lucknow',
+    // Tier 2
     'Kanpur', 'Nagpur', 'Indore', 'Bhopal', 'Patna',
     'Vadodara', 'Ludhiana', 'Agra', 'Varanasi', 'Chandigarh',
     'Noida', 'Gurugram', 'Faridabad', 'Ghaziabad', 'Meerut',
+    // Tier 2-3
+    'Ranchi', 'Guwahati', 'Coimbatore', 'Vijayawada', 'Madurai',
+    'Raipur', 'Jodhpur', 'Kota', 'Amritsar', 'Allahabad',
+    'Jabalpur', 'Gwalior', 'Nashik', 'Rajkot', 'Dhanbad',
+    'Aurangabad', 'Srinagar', 'Dehradun', 'Mysore', 'Mangalore',
+    'Thiruvananthapuram', 'Kochi', 'Bhubaneswar', 'Visakhapatnam',
   ];
 }
