@@ -1,6 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { Users, Megaphone, MessageSquare, TrendingUp } from 'lucide-react';
+import { Users, Megaphone, MessageSquare, TrendingUp, Phone, CheckCircle, AlertCircle } from 'lucide-react';
 import { dashboardApi, leadsApi } from '../services/api';
+import api from '../services/api';
+
+interface WhatsAppAccountInfo {
+  configured: boolean;
+  phoneNumberId: string | null;
+  wabaId: string | null;
+  phoneDisplay: string | null;
+  verifiedName: string | null;
+}
 
 export default function Dashboard() {
   const { data: stats } = useQuery({
@@ -11,6 +20,14 @@ export default function Dashboard() {
   const { data: leadStats } = useQuery({
     queryKey: ['lead-stats'],
     queryFn: leadsApi.getStats,
+  });
+
+  const { data: waInfo } = useQuery({
+    queryKey: ['whatsapp-account-info'],
+    queryFn: async () => {
+      const { data } = await api.get<{ success: boolean; data: WhatsAppAccountInfo }>('/whatsapp/account-info');
+      return data.data;
+    },
   });
 
   const dashboardStats = stats?.data;
@@ -77,6 +94,41 @@ export default function Dashboard() {
           );
         })}
       </div>
+
+      {/* WhatsApp Business Account */}
+      {waInfo && (
+        <div className={`card p-4 mb-8 flex items-center gap-4 ${waInfo.configured ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${waInfo.configured ? 'bg-green-100' : 'bg-yellow-100'}`}>
+            <Phone size={20} className={waInfo.configured ? 'text-green-600' : 'text-yellow-600'} />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <p className="font-medium text-gray-900">WhatsApp Business Account</p>
+              {waInfo.configured ? (
+                <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                  <CheckCircle size={10} /> Connected
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded-full">
+                  <AlertCircle size={10} /> Not configured
+                </span>
+              )}
+            </div>
+            {waInfo.configured ? (
+              <p className="text-sm text-gray-600 mt-0.5">
+                {waInfo.verifiedName && <span className="font-medium">{waInfo.verifiedName}</span>}
+                {waInfo.verifiedName && waInfo.phoneDisplay && ' — '}
+                {waInfo.phoneDisplay && <span>{waInfo.phoneDisplay}</span>}
+                {waInfo.wabaId && <span className="text-gray-400 ml-2 text-xs">WABA: {waInfo.wabaId}</span>}
+              </p>
+            ) : (
+              <p className="text-sm text-yellow-700 mt-0.5">
+                Add WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN to your environment variables
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Lead Status Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

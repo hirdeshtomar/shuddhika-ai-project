@@ -91,6 +91,44 @@ app.get('/api/dashboard', async (req, res) => {
   });
 });
 
+// WhatsApp account info endpoint (for Meta App Review — shows asset selection)
+app.get('/api/whatsapp/account-info', async (_req, res) => {
+  const phoneNumberId = env.WHATSAPP_PHONE_NUMBER_ID || null;
+  const wabaId = env.WHATSAPP_BUSINESS_ACCOUNT_ID || null;
+  const configured = !!(phoneNumberId && env.WHATSAPP_ACCESS_TOKEN);
+
+  // Fetch phone number display from Meta API if configured
+  let phoneDisplay: string | null = null;
+  let verifiedName: string | null = null;
+  if (configured && phoneNumberId) {
+    try {
+      const axios = (await import('axios')).default;
+      const resp = await axios.get(
+        `${env.WHATSAPP_API_URL}/${phoneNumberId}`,
+        {
+          headers: { Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}` },
+          params: { fields: 'display_phone_number,verified_name,quality_rating' },
+        }
+      );
+      phoneDisplay = resp.data.display_phone_number || null;
+      verifiedName = resp.data.verified_name || null;
+    } catch {
+      // If API call fails, still return what we have
+    }
+  }
+
+  res.json({
+    success: true,
+    data: {
+      configured,
+      phoneNumberId,
+      wabaId,
+      phoneDisplay,
+      verifiedName,
+    },
+  });
+});
+
 // 404 handler
 app.use(notFoundHandler);
 
