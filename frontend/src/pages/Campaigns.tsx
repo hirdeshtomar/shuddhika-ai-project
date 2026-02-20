@@ -222,7 +222,7 @@ function CreateCampaignModal({
   const [cityFilter, setCityFilter] = useState('');
   const [headerMediaUrl, setHeaderMediaUrl] = useState(SAVED_MEDIA[0]?.url || '');
   const [skipDuplicate, setSkipDuplicate] = useState(true);
-  const [sendingSpeed, setSendingSpeed] = useState<string>('slow');
+  const [sendingSpeed, setSendingSpeed] = useState<string>('warmup');
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -652,13 +652,15 @@ function CreateCampaignModal({
               value={sendingSpeed}
               onChange={(e) => setSendingSpeed(e.target.value)}
             >
+              <option value="warmup">Warmup — 1 msg every 30 min, max 10/day (for new numbers getting 131049)</option>
+              <option value="very_slow">Very Slow — 1 msg every 10 min</option>
+              <option value="slow">Slow — 1 msg every 5 min</option>
+              <option value="normal">Normal — 1 msg every 30s (established accounts only)</option>
               <option value="fast">Fast — 1 msg every 5s (risky, may get throttled)</option>
-              <option value="normal">Normal — 1 msg every 30s</option>
-              <option value="slow">Slow — 1 msg every 5 min (recommended)</option>
-              <option value="very_slow">Very Slow — 1 msg every 10 min (safest)</option>
             </select>
             <p className="text-xs text-gray-500 mt-1">
-              Slower speeds avoid Meta throttling errors. Use "Slow" or "Very Slow" for new WhatsApp accounts.
+              Getting 131049 errors? Use <strong>Warmup</strong> speed. It sends max 10 msgs/day with long gaps.
+              The campaign auto-pauses at the daily limit — resume it the next day to continue.
             </p>
           </div>
 

@@ -10,11 +10,12 @@ const router = Router();
 
 // Validation schemas
 // Sending speed presets (delay in ms between messages)
-const SENDING_SPEEDS: Record<string, { delayMs: number; label: string }> = {
-  fast: { delayMs: 5_000, label: '1 per 5s' },        // ~12/min — risky for new numbers
-  normal: { delayMs: 30_000, label: '1 per 30s' },     // ~2/min — safe for most accounts
-  slow: { delayMs: 300_000, label: '1 per 5min' },     // safe for new/low-tier numbers
-  very_slow: { delayMs: 600_000, label: '1 per 10min' }, // safest, for accounts with issues
+const SENDING_SPEEDS: Record<string, { delayMs: number; label: string; dailyLimit?: number }> = {
+  fast: { delayMs: 5_000, label: '1 per 5s' },             // ~12/min — risky for new numbers
+  normal: { delayMs: 30_000, label: '1 per 30s' },          // ~2/min — safe for established accounts
+  slow: { delayMs: 300_000, label: '1 per 5min' },          // safe for newer numbers
+  very_slow: { delayMs: 600_000, label: '1 per 10min' },    // for accounts with warnings
+  warmup: { delayMs: 1_800_000, label: '1 per 30min', dailyLimit: 10 }, // for new numbers getting 131049
 };
 
 const createCampaignSchema = z.object({
@@ -25,7 +26,7 @@ const createCampaignSchema = z.object({
   leadIds: z.array(z.string()).optional(),
   headerMediaUrl: z.string().url().optional(),
   skipDuplicateTemplate: z.boolean().default(true),
-  sendingSpeed: z.enum(['fast', 'normal', 'slow', 'very_slow']).default('normal'),
+  sendingSpeed: z.enum(['fast', 'normal', 'slow', 'very_slow', 'warmup']).default('normal'),
   targetFilters: z.object({
     status: z.array(z.string()).optional(),
     source: z.array(z.string()).optional(),
@@ -634,13 +635,16 @@ async function processCampaignMessages(
   headerMediaUrl?: string,
   sendingSpeed: string = 'normal'
 ): Promise<void> {
-  const BASE_DELAY = (SENDING_SPEEDS[sendingSpeed] ?? SENDING_SPEEDS['normal']!).delayMs;
-  const MAX_RETRIES = 2; // retry throttled messages up to 2 times
+  const speedConfig = SENDING_SPEEDS[sendingSpeed] ?? SENDING_SPEEDS['normal']!;
+  const BASE_DELAY = speedConfig.delayMs;
+  const DAILY_LIMIT = speedConfig.dailyLimit || 0; // 0 = no limit
+  const MAX_RETRIES = 1; // retry throttled messages once
+  const CONSECUTIVE_THROTTLE_LIMIT = 3; // auto-pause after this many consecutive 131049s
 
-  console.log(`[Campaign ${campaignId}] Starting to send ${leadIds.length} messages (speed: ${sendingSpeed}, delay: ${BASE_DELAY / 1000}s)`);
+  console.log(`[Campaign ${campaignId}] Starting to send ${leadIds.length} messages (speed: ${sendingSpeed}, delay: ${BASE_DELAY / 1000}s${DAILY_LIMIT ? `, daily limit: ${DAILY_LIMIT}` : ''})`);
   let sent = 0;
   let failed = 0;
-  let throttleBackoff = 0; // escalating backoff for consecutive 131049 errors
+  let consecutiveThrottles = 0;
 
   for (const leadId of leadIds) {
     // Check if campaign is still running (allows pause/cancel)
@@ -651,6 +655,16 @@ async function processCampaignMessages(
 
     if (!campaign || campaign.status !== 'RUNNING') {
       console.log(`[Campaign ${campaignId}] Stopped — status is ${campaign?.status}`);
+      break;
+    }
+
+    // Enforce daily limit: pause campaign when reached, user can resume tomorrow
+    if (DAILY_LIMIT > 0 && sent >= DAILY_LIMIT) {
+      console.log(`[Campaign ${campaignId}] Daily limit of ${DAILY_LIMIT} reached — auto-pausing`);
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { status: 'PAUSED' },
+      });
       break;
     }
 
@@ -666,10 +680,9 @@ async function processCampaignMessages(
           break; // success or non-throttle error — don't retry
         }
 
-        // 131049 throttle — exponential backoff then retry
+        // 131049 throttle — wait longer then retry once
         attempts++;
-        throttleBackoff = Math.min(throttleBackoff + 1, 5);
-        const waitTime = Math.max(BASE_DELAY, 30000) * throttleBackoff;
+        const waitTime = Math.min(BASE_DELAY * 2, 600_000); // wait up to 10 minutes
         console.log(`[Campaign ${campaignId}] Throttled (131049) for lead ${leadId} — retry ${attempts}/${MAX_RETRIES} after ${waitTime / 1000}s`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
@@ -685,10 +698,26 @@ async function processCampaignMessages(
 
       if (result.success) {
         sent++;
-        throttleBackoff = Math.max(0, throttleBackoff - 1); // cool down on success
+        consecutiveThrottles = 0; // reset on success
       } else {
         failed++;
         console.log(`[Campaign ${campaignId}] Failed for lead ${leadId}: [${result.errorCode}] ${result.error}`);
+
+        // Track consecutive 131049 errors
+        if (result.errorCode === 131049) {
+          consecutiveThrottles++;
+
+          if (consecutiveThrottles >= CONSECUTIVE_THROTTLE_LIMIT) {
+            console.log(`[Campaign ${campaignId}] ${CONSECUTIVE_THROTTLE_LIMIT} consecutive 131049 errors — auto-pausing campaign. Your WhatsApp number needs time to build trust. Try again in a few hours or use "warmup" speed.`);
+            await prisma.campaign.update({
+              where: { id: campaignId },
+              data: { status: 'PAUSED', failedCount: failed },
+            });
+            break;
+          }
+        } else {
+          consecutiveThrottles = 0;
+        }
       }
 
       // Update campaign counters
