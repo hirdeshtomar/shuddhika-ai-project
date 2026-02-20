@@ -228,7 +228,7 @@ const AUTO_REPLIES: Array<{
       '   ₹235 per litre',
       '',
       '📦 *Additional Charges:*',
-      '   • GST as applicable',
+      '   • 5% GST',
       '   • Transport charges extra',
       '',
       '📞 For bulk orders & dealership enquiry, reply here or call us.',
