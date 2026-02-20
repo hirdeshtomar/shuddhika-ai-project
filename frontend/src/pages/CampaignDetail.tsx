@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Send, CheckCheck, Eye, AlertCircle, Clock, Users, UserX, Play, RotateCcw,
+  ArrowLeft, Send, CheckCheck, Eye, AlertCircle, Clock, Users, UserX, Play, Pause, RotateCcw, Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { campaignsApi } from '../services/api';
@@ -40,6 +40,54 @@ export default function CampaignDetail() {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || 'No retryable failed messages');
+    },
+  });
+
+  const startMutation = useMutation({
+    mutationFn: () => campaignsApi.start(id!),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Campaign started');
+      queryClient.invalidateQueries({ queryKey: ['campaign-analytics', id] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Failed to start campaign');
+    },
+  });
+
+  const pauseMutation = useMutation({
+    mutationFn: () => campaignsApi.pause(id!),
+    onSuccess: () => {
+      toast.success('Campaign paused');
+      queryClient.invalidateQueries({ queryKey: ['campaign-analytics', id] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Failed to pause');
+    },
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: () => campaignsApi.resume(id!),
+    onSuccess: () => {
+      toast.success('Campaign resumed');
+      queryClient.invalidateQueries({ queryKey: ['campaign-analytics', id] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Failed to resume');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => campaignsApi.delete(id!),
+    onSuccess: () => {
+      toast.success('Campaign deleted');
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      navigate('/campaigns');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Failed to delete');
     },
   });
 
@@ -90,17 +138,52 @@ export default function CampaignDetail() {
             {campaign.startedAt && ` · Started ${new Date(campaign.startedAt).toLocaleDateString()}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Start (for DRAFT campaigns) */}
+          {campaign.status === 'DRAFT' && (
+            <button
+              onClick={() => startMutation.mutate()}
+              disabled={startMutation.isPending}
+              className="btn btn-primary flex items-center gap-2 text-sm"
+            >
+              <Play size={16} />
+              {startMutation.isPending ? 'Starting...' : 'Start Campaign'}
+            </button>
+          )}
+          {/* Resume (for PAUSED campaigns) */}
+          {campaign.status === 'PAUSED' && (
+            <button
+              onClick={() => resumeMutation.mutate()}
+              disabled={resumeMutation.isPending}
+              className="btn btn-primary flex items-center gap-2 text-sm"
+            >
+              <Play size={16} />
+              {resumeMutation.isPending ? 'Resuming...' : 'Resume'}
+            </button>
+          )}
+          {/* Pause (for RUNNING campaigns) */}
+          {campaign.status === 'RUNNING' && (
+            <button
+              onClick={() => pauseMutation.mutate()}
+              disabled={pauseMutation.isPending}
+              className="btn btn-secondary flex items-center gap-2 text-sm"
+            >
+              <Pause size={16} />
+              {pauseMutation.isPending ? 'Pausing...' : 'Pause'}
+            </button>
+          )}
+          {/* Send pending */}
           {funnel.pending > 0 && (campaign.status === 'RUNNING' || campaign.status === 'PAUSED') && (
             <button
               onClick={() => resendMutation.mutate()}
               disabled={resendMutation.isPending}
               className="btn btn-primary flex items-center gap-2 text-sm"
             >
-              <Play size={16} />
+              <Send size={16} />
               {resendMutation.isPending ? 'Sending...' : `Send ${funnel.pending} Pending`}
             </button>
           )}
+          {/* Retry failed */}
           {funnel.failed > 0 && (
             <button
               onClick={() => retryFailedMutation.mutate()}
@@ -109,6 +192,21 @@ export default function CampaignDetail() {
             >
               <RotateCcw size={16} />
               {retryFailedMutation.isPending ? 'Retrying...' : `Retry ${funnel.failed} Failed`}
+            </button>
+          )}
+          {/* Delete */}
+          {(campaign.status === 'DRAFT' || campaign.status === 'PAUSED' || campaign.status === 'COMPLETED' || campaign.status === 'CANCELLED') && (
+            <button
+              onClick={() => {
+                if (confirm('Delete this campaign? This cannot be undone.')) {
+                  deleteMutation.mutate();
+                }
+              }}
+              disabled={deleteMutation.isPending}
+              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+              title="Delete campaign"
+            >
+              <Trash2 size={18} />
             </button>
           )}
         </div>

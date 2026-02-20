@@ -162,6 +162,7 @@ export default function Campaigns() {
                     </button>
                   )}
                   {(campaign.status === 'DRAFT' ||
+                    campaign.status === 'PAUSED' ||
                     campaign.status === 'COMPLETED' ||
                     campaign.status === 'CANCELLED') && (
                     <button
