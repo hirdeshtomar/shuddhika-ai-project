@@ -5,6 +5,7 @@ import {
   WhatsAppIncomingMessage,
 } from '../../types/index.js';
 import { sendPushNotification } from '../pushNotification.js';
+import { whatsappClient } from './client.js';
 
 /**
  * Process incoming WhatsApp webhook events
@@ -152,6 +153,9 @@ async function processIncomingMessage(message: WhatsAppIncomingMessage): Promise
     url: `/conversations?lead=${lead.id}`,
     tag: `msg-${lead.id}`,
   }).catch((err) => console.error('Push notification error:', err));
+
+  // Auto-reply for button clicks
+  await handleAutoReply(message, lead.id, from);
 }
 
 /**
@@ -196,6 +200,82 @@ function extractMessageContent(message: WhatsAppIncomingMessage): string {
       return message.sticker?.animated ? '[Animated sticker]' : '[Sticker]';
     default:
       return `[${message.type}]`;
+  }
+}
+
+/**
+ * Auto-reply rules for button clicks and keywords
+ */
+const AUTO_REPLIES: Array<{
+  match: (message: WhatsAppIncomingMessage) => boolean;
+  replyText: string;
+}> = [
+  {
+    // "Send Price Detail" quick reply button
+    match: (msg) => {
+      const buttonText = (msg.button?.text || msg.button?.payload || '').toLowerCase();
+      const textBody = (msg.text?.body || '').toLowerCase();
+      return buttonText.includes('price') || buttonText.includes('send price')
+        || textBody.includes('send price') || textBody.includes('price detail');
+    },
+    replyText: [
+      '🛢️ *Shuddhika Mustard Oil — Price List*',
+      '',
+      '✅ *Black Mustard Oil (Kachi Ghani)*',
+      '   ₹188 per litre',
+      '',
+      '✅ *Yellow Mustard Oil (Pili Sarson)*',
+      '   ₹235 per litre',
+      '',
+      '📦 *Additional Charges:*',
+      '   • GST as applicable',
+      '   • Transport charges extra',
+      '',
+      '📞 For bulk orders & dealership enquiry, reply here or call us.',
+      '',
+      'Thank you for your interest in Shuddhika! 🙏',
+    ].join('\n'),
+  },
+];
+
+async function handleAutoReply(
+  message: WhatsAppIncomingMessage,
+  leadId: string,
+  phone: string
+): Promise<void> {
+  for (const rule of AUTO_REPLIES) {
+    if (!rule.match(message)) continue;
+
+    console.log(`[AutoReply] Triggered for lead ${leadId} (${phone})`);
+
+    try {
+      const result = await whatsappClient.sendTextMessage(phone, rule.replyText);
+
+      // Log the auto-reply
+      await prisma.messageLog.create({
+        data: {
+          leadId,
+          channel: 'WHATSAPP',
+          direction: 'OUTBOUND',
+          content: rule.replyText,
+          whatsappMessageId: result.messageId || undefined,
+          status: result.success ? 'SENT' : 'FAILED',
+          sentAt: result.success ? new Date() : undefined,
+          failedAt: result.success ? undefined : new Date(),
+          errorMessage: result.error || undefined,
+        },
+      });
+
+      if (result.success) {
+        console.log(`[AutoReply] Sent price details to ${phone}`);
+      } else {
+        console.log(`[AutoReply] Failed for ${phone}: ${result.error}`);
+      }
+    } catch (err: any) {
+      console.error(`[AutoReply] Error for ${phone}:`, err.message);
+    }
+
+    break; // only send one auto-reply per message
   }
 }
 
