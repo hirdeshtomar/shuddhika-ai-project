@@ -6,6 +6,7 @@ import {
   FileText,
   Search,
   MessageSquare,
+  MessageSquareReply,
   LogOut,
   Menu,
   X,
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
   { name: 'Conversations', href: '/conversations', icon: MessageSquare },
   { name: 'Templates', href: '/templates', icon: FileText },
+  { name: 'Auto-Replies', href: '/auto-replies', icon: MessageSquareReply },
 ];
 
 function useNotifications() {

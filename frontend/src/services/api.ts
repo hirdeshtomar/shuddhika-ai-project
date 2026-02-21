@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ApiResponse, Lead, Campaign, MessageTemplate, DashboardStats, LeadStats, User, CampaignAnalytics, Conversation, ConversationMessages, MessageLogEntry } from '../types';
+import type { ApiResponse, Lead, Campaign, MessageTemplate, DashboardStats, LeadStats, User, CampaignAnalytics, Conversation, ConversationMessages, MessageLogEntry, AutoReply } from '../types';
 
 const api = axios.create({
   baseURL: (import.meta.env.VITE_API_URL || '') + '/api',
@@ -287,6 +287,29 @@ export const conversationsApi = {
 
   delete: async (leadId: string) => {
     const { data } = await api.delete<ApiResponse<{ deletedCount: number }>>(`/conversations/${leadId}`);
+    return data;
+  },
+};
+
+// Auto-Replies
+export const autoRepliesApi = {
+  list: async () => {
+    const { data } = await api.get<ApiResponse<AutoReply[]>>('/auto-replies');
+    return data;
+  },
+
+  create: async (rule: Partial<AutoReply>) => {
+    const { data } = await api.post<ApiResponse<AutoReply>>('/auto-replies', rule);
+    return data;
+  },
+
+  update: async (id: string, rule: Partial<AutoReply>) => {
+    const { data } = await api.put<ApiResponse<AutoReply>>(`/auto-replies/${id}`, rule);
+    return data;
+  },
+
+  delete: async (id: string) => {
+    const { data } = await api.delete<ApiResponse<void>>(`/auto-replies/${id}`);
     return data;
   },
 };

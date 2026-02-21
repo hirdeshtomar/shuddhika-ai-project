@@ -9,6 +9,7 @@ import Templates from './pages/Templates';
 import Scraper from './pages/Scraper';
 import CampaignDetail from './pages/CampaignDetail';
 import Conversations from './pages/Conversations';
+import AutoReplies from './pages/AutoReplies';
 import Login from './pages/Login';
 import { useAuth } from './hooks/useAuth';
 
@@ -53,6 +54,7 @@ function AppRoutes() {
         <Route path="campaigns/:id" element={<CampaignDetail />} />
         <Route path="conversations" element={<Conversations />} />
         <Route path="templates" element={<Templates />} />
+        <Route path="auto-replies" element={<AutoReplies />} />
         <Route path="scraper" element={<Scraper />} />
       </Route>
     </Routes>

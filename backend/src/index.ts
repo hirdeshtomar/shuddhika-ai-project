@@ -15,6 +15,7 @@ import webhookRoutes from './routes/webhook.js';
 import scraperRoutes from './routes/scraper.js';
 import conversationRoutes from './routes/conversations.js';
 import pushRoutes from './routes/push.js';
+import autoReplyRoutes from './routes/autoReplies.js';
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.use('/api/webhook', webhookRoutes);
 app.use('/api/scraper', scraperRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/auto-replies', autoReplyRoutes);
 
 // Dashboard stats endpoint
 app.get('/api/dashboard', async (req, res) => {

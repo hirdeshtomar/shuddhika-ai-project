@@ -204,54 +204,55 @@ function extractMessageContent(message: WhatsAppIncomingMessage): string {
 }
 
 /**
- * Auto-reply rules for button clicks and keywords
+ * Auto-reply using rules from the database
  */
-const AUTO_REPLIES: Array<{
-  match: (message: WhatsAppIncomingMessage) => boolean;
-  replyText: string;
-}> = [
-  {
-    // "Send Price Detail" quick reply button
-    match: (msg) => {
-      const buttonText = (msg.button?.text || msg.button?.payload || '').toLowerCase();
-      const textBody = (msg.text?.body || '').toLowerCase();
-      return buttonText.includes('price') || buttonText.includes('send price')
-        || textBody.includes('send price') || textBody.includes('price detail');
-    },
-    replyText: [
-      '🛢️ *Shuddhika Mustard Oil — Price List*',
-      '',
-      '✅ *Black Mustard Oil (Kachi Ghani)*',
-      '   ₹188 per litre',
-      '',
-      '✅ *Yellow Mustard Oil (Pili Sarson)*',
-      '   ₹235 per litre',
-      '',
-      '📦 *Additional Charges:*',
-      '   • 5% GST',
-      '   • Transport charges extra',
-      '',
-      '📞 For bulk orders & dealership enquiry, reply here or call us.',
-      '',
-      'Thank you for your interest in Shuddhika! 🙏',
-    ].join('\n'),
-  },
-];
-
 async function handleAutoReply(
   message: WhatsAppIncomingMessage,
   leadId: string,
   phone: string
 ): Promise<void> {
-  for (const rule of AUTO_REPLIES) {
-    if (!rule.match(message)) continue;
+  const rules = await prisma.autoReply.findMany({
+    where: { isActive: true },
+    orderBy: { priority: 'asc' },
+  });
 
-    console.log(`[AutoReply] Triggered for lead ${leadId} (${phone})`);
+  if (rules.length === 0) return;
+
+  const buttonText = (message.button?.text || message.button?.payload || '').toLowerCase();
+  const textBody = (message.text?.body || '').toLowerCase();
+  const interactiveText = (
+    message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || ''
+  ).toLowerCase();
+  const combinedText = `${buttonText} ${textBody} ${interactiveText}`.trim();
+  const isButtonMessage = message.type === 'button' || message.type === 'interactive';
+
+  for (const rule of rules) {
+    let matched = false;
+
+    switch (rule.triggerType) {
+      case 'KEYWORD':
+        matched = rule.triggerKeywords.some((kw) => combinedText.includes(kw.toLowerCase()));
+        break;
+      case 'BUTTON':
+        if (isButtonMessage) {
+          matched = rule.triggerKeywords.length === 0
+            || rule.triggerKeywords.some((kw) =>
+              buttonText.includes(kw.toLowerCase()) || interactiveText.includes(kw.toLowerCase())
+            );
+        }
+        break;
+      case 'ANY':
+        matched = true;
+        break;
+    }
+
+    if (!matched) continue;
+
+    console.log(`[AutoReply] Rule "${rule.name}" triggered for lead ${leadId} (${phone})`);
 
     try {
       const result = await whatsappClient.sendTextMessage(phone, rule.replyText);
 
-      // Log the auto-reply
       await prisma.messageLog.create({
         data: {
           leadId,
@@ -267,7 +268,7 @@ async function handleAutoReply(
       });
 
       if (result.success) {
-        console.log(`[AutoReply] Sent price details to ${phone}`);
+        console.log(`[AutoReply] Sent to ${phone}`);
       } else {
         console.log(`[AutoReply] Failed for ${phone}: ${result.error}`);
       }

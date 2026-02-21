@@ -304,3 +304,18 @@ enum JobStatus {
   COMPLETED
   FAILED
 }
+
+// Auto-reply rules for incoming WhatsApp messages
+model AutoReply {
+  id              String   @id @default(cuid())
+  name            String
+  triggerType      String   @default("KEYWORD") // KEYWORD | BUTTON | ANY
+  triggerKeywords  String[] @default([])
+  replyText       String
+  isActive        Boolean  @default(true)
+  priority        Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("auto_replies")
+}

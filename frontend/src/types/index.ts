@@ -197,6 +197,18 @@ export interface ConversationMessages {
   messages: MessageLogEntry[];
 }
 
+export interface AutoReply {
+  id: string;
+  name: string;
+  triggerType: 'KEYWORD' | 'BUTTON' | 'ANY';
+  triggerKeywords: string[];
+  replyText: string;
+  isActive: boolean;
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DashboardStats {
   totalLeads: number;
   newLeads: number;
