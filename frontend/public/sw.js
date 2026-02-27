@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shuddhika-v1';
+const CACHE_NAME = 'shuddhika-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -54,13 +54,21 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 
-  const data = event.data.json();
+  let data = {};
+  try {
+    data = event.data.json();
+  } catch {
+    data = { title: 'Shuddhika', body: event.data.text() };
+  }
+
   const options = {
     body: data.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     tag: data.tag || 'default',
     renotify: true,
+    vibrate: [200, 100, 200],  // Required on Android to wake the device
+    requireInteraction: false,
     data: { url: data.url || '/' },
   };
 

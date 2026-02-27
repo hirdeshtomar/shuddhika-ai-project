@@ -33,13 +33,19 @@ export async function sendPushNotification(payload: {
           endpoint: sub.endpoint,
           keys: { p256dh: sub.p256dh, auth: sub.auth },
         },
-        JSON.stringify(payload)
+        JSON.stringify(payload),
+        {
+          TTL: 86400,       // 24 hours — keeps notification alive if device is offline
+          urgency: 'high',  // Wakes Android devices in Doze mode via FCM
+        }
       );
     } catch (error: any) {
       // If subscription is expired or invalid, remove it
       if (error.statusCode === 404 || error.statusCode === 410) {
         await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
         console.log(`Removed expired push subscription: ${sub.id}`);
+      } else {
+        console.error(`Push notification error for sub ${sub.id}:`, error.statusCode, error.body);
       }
     }
   });
