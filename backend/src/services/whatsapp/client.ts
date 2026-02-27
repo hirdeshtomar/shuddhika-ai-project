@@ -88,6 +88,7 @@ export class WhatsAppClient {
     messageId: string;
     success: boolean;
     error?: string;
+    errorCode?: number;
   }> {
     try {
       const payload = {
@@ -111,10 +112,12 @@ export class WhatsAppClient {
         success: true,
       };
     } catch (error: any) {
+      const waError = error.response?.data?.error;
       return {
         messageId: '',
         success: false,
-        error: error.response?.data?.error?.message || error.message,
+        error: waError?.message || error.message,
+        errorCode: waError?.code,
       };
     }
   }

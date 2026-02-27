@@ -214,8 +214,16 @@ router.post('/:leadId/send-text', authenticate, async (req: AuthenticatedRequest
       },
     });
 
+    // 131047 = 24-hour re-engagement window has closed
+    if (result.errorCode === 131047) {
+      throw new AppError(
+        'The 24-hour reply window has expired. You can only send approved template messages to restart the conversation.',
+        400
+      );
+    }
+
     throw new AppError(
-      `Failed to send message: ${result.error}. Note: Text messages only work within the 24-hour window after the lead last messaged you. Use a template message instead.`,
+      `Failed to send message: ${result.error}`,
       400
     );
   }

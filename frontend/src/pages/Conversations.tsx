@@ -92,6 +92,12 @@ export default function Conversations() {
   const lead = messagesData?.data?.lead;
   const messages: MessageLogEntry[] = messagesData?.data?.messages || [];
 
+  // 24-hour reply window: open only if lead sent a message in the last 24h
+  const lastInboundMessage = [...messages].reverse().find((m) => m.direction === 'INBOUND');
+  const windowOpen = lastInboundMessage
+    ? Date.now() - new Date(lastInboundMessage.createdAt).getTime() < 24 * 60 * 60 * 1000
+    : false;
+
   // Send text message
   const sendTextMutation = useMutation({
     mutationFn: (text: string) => conversationsApi.sendText(selectedLeadId!, text),
@@ -375,46 +381,66 @@ export default function Conversations() {
                   This contact has opted out of messages
                 </div>
               ) : (
-                <form onSubmit={handleSendText} className="flex items-center gap-1 md:gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowTemplateModal(true)}
-                    className="p-2.5 text-gray-500 hover:text-primary-600 active:bg-gray-100 rounded-full flex-shrink-0"
-                    title="Send template message"
-                  >
-                    <FileText size={22} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={sendMediaMutation.isPending}
-                    className="p-2.5 text-gray-500 hover:text-primary-600 active:bg-gray-100 rounded-full flex-shrink-0 disabled:opacity-50"
-                    title="Attach file or photo"
-                  >
-                    <Paperclip size={22} />
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,video/*,.pdf,.doc,.docx"
-                    className="hidden"
-                    onChange={handleFileSelect}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Type a message..."
-                    className="flex-1 min-w-0 py-2.5 px-4 bg-gray-100 rounded-full text-[15px] md:text-sm border-0 focus:ring-2 focus:ring-primary-500 focus:bg-white"
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                  />
-                  <button
-                    type="submit"
-                    disabled={!messageText.trim() || sendTextMutation.isPending}
-                    className="p-2.5 text-white bg-primary-600 hover:bg-primary-700 rounded-full disabled:opacity-50 active:bg-primary-800 flex-shrink-0"
-                  >
-                    <Send size={20} />
-                  </button>
-                </form>
+                <>
+                  {/* 24-hour window expired banner */}
+                  {messages.length > 0 && !windowOpen && (
+                    <div className="flex items-center justify-between gap-2 mb-2 px-1 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                      <div className="flex items-center gap-1.5">
+                        <Clock size={13} className="flex-shrink-0 text-amber-600" />
+                        <span>24-hour reply window closed. Use a template to message.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowTemplateModal(true)}
+                        className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 active:bg-amber-800"
+                      >
+                        <FileText size={12} />
+                        Template
+                      </button>
+                    </div>
+                  )}
+                  <form onSubmit={handleSendText} className="flex items-center gap-1 md:gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowTemplateModal(true)}
+                      className="p-2.5 text-gray-500 hover:text-primary-600 active:bg-gray-100 rounded-full flex-shrink-0"
+                      title="Send template message"
+                    >
+                      <FileText size={22} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={sendMediaMutation.isPending || !windowOpen}
+                      className="p-2.5 text-gray-500 hover:text-primary-600 active:bg-gray-100 rounded-full flex-shrink-0 disabled:opacity-30"
+                      title={windowOpen ? 'Attach file or photo' : '24-hour window closed'}
+                    >
+                      <Paperclip size={22} />
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,video/*,.pdf,.doc,.docx"
+                      className="hidden"
+                      onChange={handleFileSelect}
+                    />
+                    <input
+                      type="text"
+                      placeholder={windowOpen ? 'Type a message...' : 'Window closed — send a template'}
+                      className="flex-1 min-w-0 py-2.5 px-4 bg-gray-100 rounded-full text-[15px] md:text-sm border-0 focus:ring-2 focus:ring-primary-500 focus:bg-white disabled:cursor-not-allowed disabled:text-gray-400"
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      disabled={!windowOpen}
+                    />
+                    <button
+                      type="submit"
+                      disabled={!messageText.trim() || sendTextMutation.isPending || !windowOpen}
+                      className="p-2.5 text-white bg-primary-600 hover:bg-primary-700 rounded-full disabled:opacity-50 active:bg-primary-800 flex-shrink-0"
+                    >
+                      <Send size={20} />
+                    </button>
+                  </form>
+                </>
               )}
               {sendMediaMutation.isPending && (
                 <div className="text-xs text-gray-500 mt-1.5 text-center flex items-center justify-center gap-1.5">
