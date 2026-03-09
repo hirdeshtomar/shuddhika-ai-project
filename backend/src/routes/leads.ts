@@ -55,7 +55,7 @@ function normalizePhone(phone: string): string {
 // GET /api/leads - List leads with pagination and filters
 router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
   const page = Math.max(1, parseInt(req.query.page as string) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit as string) || 20));
   const skip = (page - 1) * limit;
 
   // Build filters
@@ -92,6 +92,10 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<Ap
   }
   if (filters.optedOut !== undefined) {
     where.optedOut = filters.optedOut;
+  }
+  const createdAfter = req.query.createdAfter ? new Date(req.query.createdAfter as string) : undefined;
+  if (createdAfter && !isNaN(createdAfter.getTime())) {
+    where.createdAt = { gte: createdAfter };
   }
 
   const [leads, total] = await Promise.all([

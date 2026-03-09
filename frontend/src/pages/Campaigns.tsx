@@ -221,6 +221,8 @@ function CreateCampaignModal({
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
   const [leadSearch, setLeadSearch] = useState('');
   const [cityFilter, setCityFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [addedWithin, setAddedWithin] = useState<number>(0); // 0 = all, 7 = last 7 days, 30 = last 30 days
   const [headerMediaUrl, setHeaderMediaUrl] = useState(SAVED_MEDIA[0]?.url || '');
   const [skipDuplicate, setSkipDuplicate] = useState(true);
   const [sendingSpeed, setSendingSpeed] = useState<string>('warmup');
@@ -245,14 +247,24 @@ function CreateCampaignModal({
   });
   const availableCities = (citiesData?.data || []) as string[];
 
-  // Fetch leads for the picker (with city filter)
+  // Fetch leads for the picker
+  const createdAfter = addedWithin > 0
+    ? new Date(Date.now() - addedWithin * 24 * 60 * 60 * 1000).toISOString()
+    : undefined;
   const { data: leadsData, isLoading: leadsLoading } = useQuery({
-    queryKey: ['leads-picker', leadSearch, cityFilter],
-    queryFn: () => leadsApi.list({ search: leadSearch || undefined, city: cityFilter || undefined, limit: 100 }),
+    queryKey: ['leads-picker', leadSearch, cityFilter, statusFilter, addedWithin],
+    queryFn: () => leadsApi.list({
+      search: leadSearch || undefined,
+      city: cityFilter || undefined,
+      status: statusFilter.length > 0 ? statusFilter.join(',') : undefined,
+      createdAfter,
+      limit: 500,
+    }),
     enabled: targetMode === 'select',
   });
 
   const leads = (leadsData?.data || []) as Lead[];
+  const totalMatchingLeads = (leadsData as any)?.pagination?.total ?? leads.length;
 
   const createMutation = useMutation({
     mutationFn: campaignsApi.create,
@@ -323,6 +335,12 @@ function CreateCampaignModal({
       else next.add(id);
       return next;
     });
+  };
+
+  const toggleStatusFilter = (status: string) => {
+    setStatusFilter((prev) =>
+      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
+    );
   };
 
   const selectAll = () => {
@@ -472,8 +490,9 @@ function CreateCampaignModal({
 
           {/* Select Specific Leads */}
           {targetMode === 'select' && (
-            <div>
-              <div className="flex gap-2 mb-2">
+            <div className="space-y-2">
+              {/* Search + City */}
+              <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
@@ -498,9 +517,50 @@ function CreateCampaignModal({
                   </select>
                 </div>
               </div>
-              <div className="flex items-center justify-between mb-2">
+
+              {/* Status filter pills */}
+              <div className="flex flex-wrap gap-1.5">
+                {['NEW', 'CONTACTED', 'INTERESTED', 'NEGOTIATING'].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => toggleStatusFilter(s)}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                      statusFilter.includes(s)
+                        ? 'bg-primary-100 text-primary-700 border-primary-300'
+                        : 'bg-gray-100 text-gray-500 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+
+              {/* Recently added presets */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-500 shrink-0">Added:</span>
+                {([{ label: 'Last 7 days', value: 7 }, { label: 'Last 30 days', value: 30 }, { label: 'All time', value: 0 }]).map(({ label, value }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setAddedWithin(value)}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                      addedWithin === value
+                        ? 'bg-blue-100 text-blue-700 border-blue-300'
+                        : 'bg-gray-100 text-gray-500 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Count bar */}
+              <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">
-                  {selectedLeadIds.size} lead{selectedLeadIds.size !== 1 ? 's' : ''} selected
+                  {selectedLeadIds.size > 0
+                    ? `${selectedLeadIds.size} of ${totalMatchingLeads} selected`
+                    : `${totalMatchingLeads} lead${totalMatchingLeads !== 1 ? 's' : ''} match`}
                 </span>
                 <div className="flex gap-2">
                   <button
@@ -508,7 +568,7 @@ function CreateCampaignModal({
                     onClick={selectAll}
                     className="text-xs text-primary-600 hover:text-primary-800"
                   >
-                    Select all
+                    Select all ({leads.length})
                   </button>
                   <button
                     type="button"
@@ -519,11 +579,13 @@ function CreateCampaignModal({
                   </button>
                 </div>
               </div>
+
+              {/* Lead list */}
               <div className="border rounded-lg max-h-48 overflow-y-auto divide-y">
                 {leadsLoading ? (
                   <div className="p-3 text-center text-sm text-gray-500">Loading leads...</div>
                 ) : leads.length === 0 ? (
-                  <div className="p-3 text-center text-sm text-gray-500">No leads found</div>
+                  <div className="p-3 text-center text-sm text-gray-500">No leads match these filters</div>
                 ) : (
                   leads.map((lead) => (
                     <label
@@ -558,7 +620,12 @@ function CreateCampaignModal({
                           {lead.city ? ` · ${lead.city}` : ''}
                         </div>
                       </div>
-                      <span className="text-xs text-gray-400 shrink-0">{lead.status}</span>
+                      <span className={`text-xs shrink-0 px-1.5 py-0.5 rounded-full ${
+                        lead.status === 'NEW' ? 'bg-gray-100 text-gray-500' :
+                        lead.status === 'INTERESTED' ? 'bg-green-100 text-green-700' :
+                        lead.status === 'NEGOTIATING' ? 'bg-blue-100 text-blue-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>{lead.status}</span>
                     </label>
                   ))
                 )}

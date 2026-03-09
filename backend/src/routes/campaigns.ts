@@ -638,13 +638,13 @@ async function processCampaignMessages(
   const speedConfig = SENDING_SPEEDS[sendingSpeed] ?? SENDING_SPEEDS['normal']!;
   const BASE_DELAY = speedConfig.delayMs;
   const DAILY_LIMIT = speedConfig.dailyLimit || 0; // 0 = no limit
-  const MAX_RETRIES = 1; // retry throttled messages once
-  const CONSECUTIVE_THROTTLE_LIMIT = 3; // auto-pause after this many consecutive 131049s
+  const RATE_WINDOW = 20;        // rolling window size for success rate check
+  const MIN_SUCCESS_RATE = 0.60; // auto-pause if success rate drops below 60%
 
   console.log(`[Campaign ${campaignId}] Starting to send ${leadIds.length} messages (speed: ${sendingSpeed}, delay: ${BASE_DELAY / 1000}s${DAILY_LIMIT ? `, daily limit: ${DAILY_LIMIT}` : ''})`);
   let sent = 0;
   let failed = 0;
-  let consecutiveThrottles = 0;
+  const recentOutcomes: boolean[] = []; // rolling window of last RATE_WINDOW outcomes
 
   for (const leadId of leadIds) {
     // Check if campaign is still running (allows pause/cancel)
@@ -669,25 +669,7 @@ async function processCampaignMessages(
     }
 
     try {
-      let result: { success: boolean; messageId?: string; error?: string; errorCode?: number } | undefined;
-      let attempts = 0;
-
-      // Retry loop for throttled (131049) messages
-      while (attempts <= MAX_RETRIES) {
-        result = await sendCampaignMessage(leadId, campaignId, templateId, [], headerMediaUrl);
-
-        if (result.success || result.errorCode !== 131049) {
-          break; // success or non-throttle error — don't retry
-        }
-
-        // 131049 throttle — wait longer then retry once
-        attempts++;
-        const waitTime = Math.min(BASE_DELAY * 2, 600_000); // wait up to 10 minutes
-        console.log(`[Campaign ${campaignId}] Throttled (131049) for lead ${leadId} — retry ${attempts}/${MAX_RETRIES} after ${waitTime / 1000}s`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-      }
-
-      if (!result) continue;
+      const result = await sendCampaignMessage(leadId, campaignId, templateId, [], headerMediaUrl);
 
       // Update campaign-lead status
       const newStatus = result.success ? 'SENT' : 'FAILED';
@@ -698,25 +680,25 @@ async function processCampaignMessages(
 
       if (result.success) {
         sent++;
-        consecutiveThrottles = 0; // reset on success
       } else {
         failed++;
         console.log(`[Campaign ${campaignId}] Failed for lead ${leadId}: [${result.errorCode}] ${result.error}`);
+      }
 
-        // Track consecutive 131049 errors
-        if (result.errorCode === 131049) {
-          consecutiveThrottles++;
+      // Update rolling window and check success rate
+      recentOutcomes.push(result.success);
+      if (recentOutcomes.length > RATE_WINDOW) recentOutcomes.shift();
 
-          if (consecutiveThrottles >= CONSECUTIVE_THROTTLE_LIMIT) {
-            console.log(`[Campaign ${campaignId}] ${CONSECUTIVE_THROTTLE_LIMIT} consecutive 131049 errors — auto-pausing campaign. Your WhatsApp number needs time to build trust. Try again in a few hours or use "warmup" speed.`);
-            await prisma.campaign.update({
-              where: { id: campaignId },
-              data: { status: 'PAUSED', failedCount: failed },
-            });
-            break;
-          }
-        } else {
-          consecutiveThrottles = 0;
+      if (recentOutcomes.length === RATE_WINDOW) {
+        const successCount = recentOutcomes.filter(Boolean).length;
+        const successRate = successCount / RATE_WINDOW;
+        if (successRate < MIN_SUCCESS_RATE) {
+          console.log(`[Campaign ${campaignId}] Success rate dropped to ${Math.round(successRate * 100)}% over last ${RATE_WINDOW} messages — auto-pausing`);
+          await prisma.campaign.update({
+            where: { id: campaignId },
+            data: { status: 'PAUSED', failedCount: failed },
+          });
+          break;
         }
       }
 

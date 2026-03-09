@@ -81,6 +81,7 @@ export const leadsApi = {
     source?: string;
     search?: string;
     city?: string;
+    createdAfter?: string;
   }) => {
     const { data } = await api.get<ApiResponse<Lead[]>>('/leads', { params });
     return data;
@@ -249,7 +250,7 @@ export const templatesApi = {
 
 // Conversations (Chat)
 export const conversationsApi = {
-  list: async (params?: { page?: number; limit?: number; search?: string }) => {
+  list: async (params?: { page?: number; limit?: number; search?: string; filter?: string }) => {
     const { data } = await api.get<ApiResponse<Conversation[]>>('/conversations', { params });
     return data;
   },

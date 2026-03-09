@@ -29,9 +29,10 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<Ap
   const page = Math.max(1, parseInt(req.query.page as string) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 30));
   const search = req.query.search as string | undefined;
+  const filter = req.query.filter as string | undefined; // 'replied' = only leads with inbound messages
 
   const where: any = {
-    messages: { some: {} },
+    messages: { some: filter === 'replied' ? { direction: 'INBOUND' } : {} },
   };
 
   if (search) {

@@ -35,6 +35,7 @@ export default function Conversations() {
   const queryClient = useQueryClient();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'replied'>('all');
   const [messageText, setMessageText] = useState('');
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ leadId: string; name: string } | null>(null);
@@ -51,9 +52,14 @@ export default function Conversations() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['conversations', searchQuery],
+    queryKey: ['conversations', searchQuery, activeFilter],
     queryFn: ({ pageParam }) =>
-      conversationsApi.list({ search: searchQuery || undefined, page: pageParam, limit: 30 }),
+      conversationsApi.list({
+        search: searchQuery || undefined,
+        page: pageParam,
+        limit: 30,
+        filter: activeFilter === 'replied' ? 'replied' : undefined,
+      }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       const p = lastPage.pagination;
@@ -196,7 +202,7 @@ export default function Conversations() {
           <div className="px-4 pt-4 pb-1 md:hidden">
             <h1 className="text-xl font-bold text-gray-900">Conversations</h1>
           </div>
-          <div className="px-4 py-3">
+          <div className="px-4 py-3 space-y-2">
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -206,6 +212,28 @@ export default function Conversations() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setActiveFilter('all')}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  activeFilter === 'all'
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setActiveFilter('replied')}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  activeFilter === 'replied'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                Replied
+              </button>
             </div>
           </div>
         </div>
@@ -222,10 +250,10 @@ export default function Conversations() {
                 <MessageSquare size={24} className="text-gray-400" />
               </div>
               <p className="text-sm font-medium text-gray-600">
-                {searchQuery ? 'No contacts found' : 'No conversations yet'}
+                {searchQuery ? 'No contacts found' : activeFilter === 'replied' ? 'No replies yet' : 'No conversations yet'}
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                {searchQuery ? 'Try a different search' : 'Send a campaign to start messaging'}
+                {searchQuery ? 'Try a different search' : activeFilter === 'replied' ? 'Leads who reply to your messages will appear here' : 'Send a campaign to start messaging'}
               </p>
             </div>
           ) : (
