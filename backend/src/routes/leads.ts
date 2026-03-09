@@ -38,18 +38,20 @@ const updateLeadSchema = createLeadSchema.partial().extend({
   optedOut: z.boolean().optional(),
 });
 
-// Normalize phone number (remove spaces, dashes, and ensure country code)
+// Normalize phone number to Indian format (strips all non-digits)
 function normalizePhone(phone: string): string {
-  let normalized = phone.replace(/[\s\-\(\)]/g, '');
-  // Add India country code if not present
-  if (normalized.startsWith('0')) {
-    normalized = '91' + normalized.substring(1);
-  } else if (!normalized.startsWith('91') && !normalized.startsWith('+91')) {
-    normalized = '91' + normalized;
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('91') && digits.length === 12) {
+    return digits; // Already correct: 91XXXXXXXXXX
   }
-  // Remove + if present
-  normalized = normalized.replace(/^\+/, '');
-  return normalized;
+  if (digits.startsWith('0') && digits.length === 11) {
+    return '91' + digits.substring(1); // 0XXXXXXXXXX → 91XXXXXXXXXX
+  }
+  if (digits.length === 10) {
+    return '91' + digits; // XXXXXXXXXX → 91XXXXXXXXXX
+  }
+  // Fallback: return digits as-is (e.g. already 12-digit non-91 or other)
+  return digits;
 }
 
 // GET /api/leads - List leads with pagination and filters

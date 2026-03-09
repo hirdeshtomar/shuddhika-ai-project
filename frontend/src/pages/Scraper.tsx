@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, MapPin, Download, AlertCircle, CheckCircle, Clock, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../services/api';
+import { leadsApi } from '../services/api';
 
 interface ScraperStatus {
   googleMaps: {
@@ -56,6 +57,15 @@ export default function Scraper() {
     queryFn: async () => {
       const { data } = await api.get<{ data: Suggestions }>('/scraper/suggestions');
       return data.data;
+    },
+  });
+
+  // Get cities from existing leads
+  const { data: leadCities } = useQuery({
+    queryKey: ['lead-cities'],
+    queryFn: async () => {
+      const data = await leadsApi.getCities();
+      return data.data as string[];
     },
   });
 
@@ -192,18 +202,47 @@ export default function Scraper() {
                 onChange={(e) => setLocation(e.target.value)}
               />
             </div>
+            {leadCities && leadCities.length > 0 && (
+              <div className="mt-2">
+                <p className="text-xs text-gray-400 mb-1">Your cities:</p>
+                <div className="flex flex-wrap gap-1">
+                  {leadCities.slice(0, 20).map((city) => (
+                    <button
+                      key={city}
+                      type="button"
+                      onClick={() => setLocation(city)}
+                      className={`text-xs px-2 py-1 rounded-full border ${
+                        location === city
+                          ? 'bg-blue-100 border-blue-400 text-blue-800'
+                          : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'
+                      }`}
+                    >
+                      {city}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {suggestions?.cities && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {suggestions.cities.slice(0, 16).map((city) => (
-                  <button
-                    key={city}
-                    type="button"
-                    onClick={() => setLocation(city)}
-                    className="text-xs px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200"
-                  >
-                    {city}
-                  </button>
-                ))}
+              <div className="mt-2">
+                {leadCities && leadCities.length > 0 && (
+                  <p className="text-xs text-gray-400 mb-1">Other cities:</p>
+                )}
+                <div className="flex flex-wrap gap-1">
+                  {suggestions.cities
+                    .filter((c) => !leadCities?.includes(c))
+                    .slice(0, 12)
+                    .map((city) => (
+                      <button
+                        key={city}
+                        type="button"
+                        onClick={() => setLocation(city)}
+                        className="text-xs px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200"
+                      >
+                        {city}
+                      </button>
+                    ))}
+                </div>
               </div>
             )}
           </div>
