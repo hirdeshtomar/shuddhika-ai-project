@@ -217,12 +217,11 @@ function CreateCampaignModal({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [targetMode, setTargetMode] = useState<'filter' | 'select'>('select');
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
   const [leadSearch, setLeadSearch] = useState('');
   const [cityFilter, setCityFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
-  const [addedWithin, setAddedWithin] = useState<number>(0); // 0 = all, 7 = last 7 days, 30 = last 30 days
+  const [addedWithin, setAddedWithin] = useState<number>(0);
   const [headerMediaUrl, setHeaderMediaUrl] = useState(SAVED_MEDIA[0]?.url || '');
   const [skipDuplicate, setSkipDuplicate] = useState(true);
   const [sendingSpeed, setSendingSpeed] = useState<string>('warmup');
@@ -230,27 +229,21 @@ function CreateCampaignModal({
     name: '',
     description: '',
     templateId: templates[0]?.id || '',
-    targetFilters: {
-      status: [] as string[],
-      cities: [] as string[],
-    },
   });
 
-  // Check if selected template needs a media header
   const selectedTemplate = templates.find((t) => t.id === formData.templateId);
   const needsMediaUrl = selectedTemplate?.headerType === 'IMAGE' || selectedTemplate?.headerType === 'VIDEO';
 
-  // Fetch distinct cities for the filter
   const { data: citiesData } = useQuery({
     queryKey: ['lead-cities'],
     queryFn: leadsApi.getCities,
   });
   const availableCities = (citiesData?.data || []) as string[];
 
-  // Fetch leads for the picker
   const createdAfter = addedWithin > 0
     ? new Date(Date.now() - addedWithin * 24 * 60 * 60 * 1000).toISOString()
     : undefined;
+
   const { data: leadsData, isLoading: leadsLoading } = useQuery({
     queryKey: ['leads-picker', leadSearch, cityFilter, statusFilter, addedWithin],
     queryFn: () => leadsApi.list({
@@ -260,11 +253,16 @@ function CreateCampaignModal({
       createdAfter,
       limit: 500,
     }),
-    enabled: targetMode === 'select',
   });
 
   const leads = (leadsData?.data || []) as Lead[];
   const totalMatchingLeads = (leadsData as any)?.pagination?.total ?? leads.length;
+
+  const activeFilterCount =
+    (statusFilter.length > 0 ? 1 : 0) +
+    (cityFilter ? 1 : 0) +
+    (addedWithin > 0 ? 1 : 0) +
+    (leadSearch ? 1 : 0);
 
   const createMutation = useMutation({
     mutationFn: campaignsApi.create,
@@ -278,7 +276,7 @@ function CreateCampaignModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (targetMode === 'select' && selectedLeadIds.size === 0) {
+    if (selectedLeadIds.size === 0) {
       toast.error('Select at least one lead');
       return;
     }
@@ -292,40 +290,12 @@ function CreateCampaignModal({
       templateId: formData.templateId,
       skipDuplicateTemplate: skipDuplicate,
       sendingSpeed,
+      leadIds: Array.from(selectedLeadIds),
     };
     if (needsMediaUrl && headerMediaUrl.trim()) {
       payload.headerMediaUrl = headerMediaUrl.trim();
     }
-    if (targetMode === 'select') {
-      payload.leadIds = Array.from(selectedLeadIds);
-    } else {
-      payload.targetFilters = formData.targetFilters;
-    }
     createMutation.mutate(payload);
-  };
-
-  const handleStatusChange = (status: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      targetFilters: {
-        ...prev.targetFilters,
-        status: prev.targetFilters.status.includes(status)
-          ? prev.targetFilters.status.filter((s) => s !== status)
-          : [...prev.targetFilters.status, status],
-      },
-    }));
-  };
-
-  const handleCityToggle = (city: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      targetFilters: {
-        ...prev.targetFilters,
-        cities: prev.targetFilters.cities.includes(city)
-          ? prev.targetFilters.cities.filter((c) => c !== city)
-          : [...prev.targetFilters.cities, city],
-      },
-    }));
   };
 
   const toggleLead = (id: string) => {
@@ -338,414 +308,288 @@ function CreateCampaignModal({
   };
 
   const toggleStatusFilter = (status: string) => {
+    setSelectedLeadIds(new Set()); // clear selection when filter changes
     setStatusFilter((prev) =>
       prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
     );
   };
 
-  const selectAll = () => {
-    setSelectedLeadIds(new Set(leads.map((l) => l.id)));
-  };
+  const selectAll = () => setSelectedLeadIds(new Set(leads.map((l) => l.id)));
+  const deselectAll = () => setSelectedLeadIds(new Set());
 
-  const deselectAll = () => {
-    setSelectedLeadIds(new Set());
+  const statusColors: Record<string, string> = {
+    NEW: 'bg-gray-100 text-gray-500',
+    CONTACTED: 'bg-yellow-100 text-yellow-700',
+    INTERESTED: 'bg-green-100 text-green-700',
+    NEGOTIATING: 'bg-blue-100 text-blue-700',
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b shrink-0">
           <h2 className="text-lg font-semibold">Create Campaign</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={20} />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto flex-1">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Campaign Name *
-            </label>
-            <input
-              type="text"
-              className="input"
-              placeholder="e.g., Diwali Promotion 2024"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
-              className="input"
-              rows={2}
-              value={formData.description}
-              onChange={(e) =>
-                setFormData({ ...formData, description: e.target.value })
-              }
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Message Template *
-            </label>
-            <select
-              className="input"
-              value={formData.templateId}
-              onChange={(e) =>
-                setFormData({ ...formData, templateId: e.target.value })
-              }
-              required
-            >
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name} ({template.language === 'hi' ? 'Hindi' : 'English'})
-                </option>
-              ))}
-            </select>
-          </div>
+        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1">
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
 
-          {/* Header Media URL (for IMAGE/VIDEO templates) */}
-          {needsMediaUrl && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {selectedTemplate?.headerType === 'VIDEO' ? 'Video' : 'Image'} URL *
-              </label>
-              <select
-                className="input mb-2"
-                value={SAVED_MEDIA.some((m) => m.url === headerMediaUrl) ? headerMediaUrl : '__custom__'}
-                onChange={(e) => {
-                  if (e.target.value === '__custom__') {
-                    setHeaderMediaUrl('');
-                  } else {
-                    setHeaderMediaUrl(e.target.value);
-                  }
-                }}
-              >
-                {SAVED_MEDIA.filter(
-                  (m) => m.type === (selectedTemplate?.headerType === 'VIDEO' ? 'video' : 'image')
-                ).map((m) => (
-                  <option key={m.url} value={m.url}>
-                    {m.label}
-                  </option>
-                ))}
-                <option value="__custom__">Custom URL...</option>
-              </select>
-              {!SAVED_MEDIA.some((m) => m.url === headerMediaUrl) && (
+            {/* ── Left column: Campaign settings ── */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Campaign Name *</label>
                 <input
-                  type="url"
+                  type="text"
                   className="input"
-                  placeholder={
-                    selectedTemplate?.headerType === 'VIDEO'
-                      ? 'https://example.com/promo-video.mp4'
-                      : 'https://example.com/product-image.jpg'
-                  }
-                  value={headerMediaUrl}
-                  onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                  placeholder="e.g., Diwali Promotion 2024"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  className="input"
+                  rows={2}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Message Template *</label>
+                <select
+                  className="input"
+                  value={formData.templateId}
+                  onChange={(e) => setFormData({ ...formData, templateId: e.target.value })}
+                  required
+                >
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} ({template.language === 'hi' ? 'Hindi' : 'English'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {needsMediaUrl && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {selectedTemplate?.headerType === 'VIDEO' ? 'Video' : 'Image'} URL *
+                  </label>
+                  <select
+                    className="input mb-2"
+                    value={SAVED_MEDIA.some((m) => m.url === headerMediaUrl) ? headerMediaUrl : '__custom__'}
+                    onChange={(e) => setHeaderMediaUrl(e.target.value === '__custom__' ? '' : e.target.value)}
+                  >
+                    {SAVED_MEDIA.filter(
+                      (m) => m.type === (selectedTemplate?.headerType === 'VIDEO' ? 'video' : 'image')
+                    ).map((m) => (
+                      <option key={m.url} value={m.url}>{m.label}</option>
+                    ))}
+                    <option value="__custom__">Custom URL...</option>
+                  </select>
+                  {!SAVED_MEDIA.some((m) => m.url === headerMediaUrl) && (
+                    <input
+                      type="url"
+                      className="input"
+                      placeholder={selectedTemplate?.headerType === 'VIDEO' ? 'https://example.com/video.mp4' : 'https://example.com/image.jpg'}
+                      value={headerMediaUrl}
+                      onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                      required
+                    />
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    {selectedTemplate?.headerType === 'VIDEO' ? 'Public .mp4 URL (max 16MB)' : 'Public JPEG/PNG URL (max 5MB)'}
+                  </p>
+                </div>
               )}
-              <p className="text-xs text-gray-500 mt-1">
-                {selectedTemplate?.headerType === 'VIDEO'
-                  ? 'Publicly accessible .mp4 video URL (max 16MB)'
-                  : 'Publicly accessible image URL (JPEG/PNG, max 5MB)'}
-              </p>
-            </div>
-          )}
 
-          {/* Target Mode Toggle */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Target Leads
-            </label>
-            <div className="flex rounded-lg border overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setTargetMode('select')}
-                className={`flex-1 px-3 py-2 text-sm font-medium ${
-                  targetMode === 'select'
-                    ? 'bg-primary-50 text-primary-700 border-r border-primary-200'
-                    : 'bg-white text-gray-600 border-r hover:bg-gray-50'
-                }`}
-              >
-                Select Leads
-              </button>
-              <button
-                type="button"
-                onClick={() => setTargetMode('filter')}
-                className={`flex-1 px-3 py-2 text-sm font-medium ${
-                  targetMode === 'filter'
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                Filter by Status
-              </button>
-            </div>
-          </div>
+              <label className="flex items-start gap-3 p-3 rounded-lg border bg-gray-50 cursor-pointer hover:bg-gray-100">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  checked={skipDuplicate}
+                  onChange={(e) => setSkipDuplicate(e.target.checked)}
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Skip leads who already received this template</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Avoids sending the same message twice.</p>
+                </div>
+              </label>
 
-          {/* Select Specific Leads */}
-          {targetMode === 'select' && (
-            <div className="space-y-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sending Speed</label>
+                <select className="input" value={sendingSpeed} onChange={(e) => setSendingSpeed(e.target.value)}>
+                  <option value="warmup">Warmup — 1 per 30 min, max 10/day</option>
+                  <option value="very_slow">Very Slow — 1 per 10 min</option>
+                  <option value="slow">Slow — 1 per 5 min</option>
+                  <option value="normal">Normal — 1 per 30s</option>
+                  <option value="fast">Fast — 1 per 5s (risky)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* ── Right column: Lead picker ── */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">
+                  Select Leads
+                  {activeFilterCount > 0 && (
+                    <span className="ml-2 px-1.5 py-0.5 text-xs bg-primary-100 text-primary-700 rounded-full">
+                      {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''} active
+                    </span>
+                  )}
+                </label>
+                {activeFilterCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLeadSearch('');
+                      setCityFilter('');
+                      setStatusFilter([]);
+                      setAddedWithin(0);
+                      setSelectedLeadIds(new Set());
+                    }}
+                    className="text-xs text-gray-400 hover:text-red-500"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+
               {/* Search + City */}
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
-                    className="input pl-9"
-                    placeholder="Search by name, phone, or business..."
+                    className="input pl-8 text-sm py-2"
+                    placeholder="Search name, phone, business..."
                     value={leadSearch}
-                    onChange={(e) => setLeadSearch(e.target.value)}
+                    onChange={(e) => { setLeadSearch(e.target.value); setSelectedLeadIds(new Set()); }}
                   />
                 </div>
-                <div className="relative shrink-0">
-                  <MapPin size={16} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  <select
-                    className="input pl-8 pr-8 appearance-none min-w-[120px]"
-                    value={cityFilter}
-                    onChange={(e) => setCityFilter(e.target.value)}
-                  >
-                    <option value="">All Cities</option>
-                    {availableCities.map((city) => (
-                      <option key={city} value={city}>{city}</option>
-                    ))}
-                  </select>
-                </div>
+                <select
+                  className="input text-sm py-2 min-w-[110px]"
+                  value={cityFilter}
+                  onChange={(e) => { setCityFilter(e.target.value); setSelectedLeadIds(new Set()); }}
+                >
+                  <option value="">All Cities</option>
+                  {availableCities.map((city) => (
+                    <option key={city} value={city}>{city}</option>
+                  ))}
+                </select>
               </div>
 
-              {/* Status filter pills */}
+              {/* Status pills */}
               <div className="flex flex-wrap gap-1.5">
-                {['NEW', 'CONTACTED', 'INTERESTED', 'NEGOTIATING'].map((s) => (
+                {(['NEW', 'CONTACTED', 'INTERESTED', 'NEGOTIATING'] as const).map((s) => (
                   <button
                     key={s}
                     type="button"
                     onClick={() => toggleStatusFilter(s)}
-                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
                       statusFilter.includes(s)
-                        ? 'bg-primary-100 text-primary-700 border-primary-300'
-                        : 'bg-gray-100 text-gray-500 border-gray-200 hover:border-gray-300'
+                        ? `${statusColors[s]} border-current ring-1 ring-current`
+                        : 'bg-gray-100 text-gray-500 border-transparent hover:border-gray-300'
                     }`}
                   >
-                    {s}
+                    {statusFilter.includes(s) ? '✓ ' : ''}{s}
                   </button>
                 ))}
               </div>
 
-              {/* Recently added presets */}
+              {/* Date presets */}
               <div className="flex items-center gap-1.5">
-                <span className="text-xs text-gray-500 shrink-0">Added:</span>
+                <span className="text-xs text-gray-400 shrink-0">Added:</span>
                 {([{ label: 'Last 7 days', value: 7 }, { label: 'Last 30 days', value: 30 }, { label: 'All time', value: 0 }]).map(({ label, value }) => (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setAddedWithin(value)}
+                    onClick={() => { setAddedWithin(value); setSelectedLeadIds(new Set()); }}
                     className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
                       addedWithin === value
-                        ? 'bg-blue-100 text-blue-700 border-blue-300'
-                        : 'bg-gray-100 text-gray-500 border-gray-200 hover:border-gray-300'
+                        ? 'bg-blue-100 text-blue-700 border-blue-300 font-medium'
+                        : 'bg-gray-100 text-gray-500 border-transparent hover:border-gray-300'
                     }`}
                   >
-                    {label}
+                    {addedWithin === value && value > 0 ? '✓ ' : ''}{label}
                   </button>
                 ))}
               </div>
 
-              {/* Count bar */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">
-                  {selectedLeadIds.size > 0
-                    ? `${selectedLeadIds.size} of ${totalMatchingLeads} selected`
-                    : `${totalMatchingLeads} lead${totalMatchingLeads !== 1 ? 's' : ''} match`}
+              {/* Count + select all */}
+              <div className="flex items-center justify-between pt-0.5 border-t">
+                <span className="text-xs text-gray-500">
+                  {leadsLoading ? 'Loading...' : (
+                    selectedLeadIds.size > 0
+                      ? <><span className="font-semibold text-primary-700">{selectedLeadIds.size}</span> of {totalMatchingLeads} selected</>
+                      : <><span className="font-semibold text-gray-700">{totalMatchingLeads}</span> lead{totalMatchingLeads !== 1 ? 's' : ''} match</>
+                  )}
                 </span>
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={selectAll}
-                    className="text-xs text-primary-600 hover:text-primary-800"
-                  >
+                  <button type="button" onClick={selectAll} className="text-xs text-primary-600 hover:text-primary-800 font-medium">
                     Select all ({leads.length})
                   </button>
-                  <button
-                    type="button"
-                    onClick={deselectAll}
-                    className="text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    Clear
-                  </button>
+                  {selectedLeadIds.size > 0 && (
+                    <button type="button" onClick={deselectAll} className="text-xs text-gray-400 hover:text-gray-600">
+                      Clear
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Lead list */}
-              <div className="border rounded-lg max-h-48 overflow-y-auto divide-y">
+              <div className="border rounded-lg flex-1 overflow-y-auto divide-y" style={{ minHeight: 180, maxHeight: 320 }}>
                 {leadsLoading ? (
-                  <div className="p-3 text-center text-sm text-gray-500">Loading leads...</div>
+                  <div className="p-4 text-center text-sm text-gray-400">Loading leads...</div>
                 ) : leads.length === 0 ? (
-                  <div className="p-3 text-center text-sm text-gray-500">No leads match these filters</div>
-                ) : (
-                  leads.map((lead) => (
-                    <label
-                      key={lead.id}
-                      className={`flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50 ${
-                        selectedLeadIds.has(lead.id) ? 'bg-primary-50' : ''
-                      }`}
-                    >
-                      <div
-                        className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${
-                          selectedLeadIds.has(lead.id)
-                            ? 'bg-primary-600 border-primary-600'
-                            : 'border-gray-300'
-                        }`}
-                      >
-                        {selectedLeadIds.has(lead.id) && (
-                          <Check size={14} className="text-white" />
-                        )}
-                      </div>
-                      <input
-                        type="checkbox"
-                        className="sr-only"
-                        checked={selectedLeadIds.has(lead.id)}
-                        onChange={() => toggleLead(lead.id)}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-900 truncate">
-                          {lead.businessName || lead.name || 'Unknown'}
-                        </div>
-                        <div className="text-xs text-gray-500 truncate">
-                          {lead.phone}
-                          {lead.city ? ` · ${lead.city}` : ''}
-                        </div>
-                      </div>
-                      <span className={`text-xs shrink-0 px-1.5 py-0.5 rounded-full ${
-                        lead.status === 'NEW' ? 'bg-gray-100 text-gray-500' :
-                        lead.status === 'INTERESTED' ? 'bg-green-100 text-green-700' :
-                        lead.status === 'NEGOTIATING' ? 'bg-blue-100 text-blue-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>{lead.status}</span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Filter by Status */}
-          {targetMode === 'filter' && (
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs font-medium text-gray-500 mb-1.5">Status</p>
-                <div className="flex flex-wrap gap-2">
-                  {['NEW', 'CONTACTED', 'INTERESTED', 'NEGOTIATING'].map((status) => (
-                    <label
-                      key={status}
-                      className={`px-3 py-1.5 rounded-full text-sm cursor-pointer ${
-                        formData.targetFilters.status.includes(status)
-                          ? 'bg-primary-100 text-primary-700 border-primary-200'
-                          : 'bg-gray-100 text-gray-600 border-gray-200'
-                      } border`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="sr-only"
-                        checked={formData.targetFilters.status.includes(status)}
-                        onChange={() => handleStatusChange(status)}
-                      />
-                      {status.replace(/_/g, ' ')}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-500 mb-1.5">City</p>
-                {availableCities.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {availableCities.map((city) => (
-                      <label
-                        key={city}
-                        className={`px-3 py-1.5 rounded-full text-sm cursor-pointer ${
-                          formData.targetFilters.cities.includes(city)
-                            ? 'bg-blue-100 text-blue-700 border-blue-200'
-                            : 'bg-gray-100 text-gray-600 border-gray-200'
-                        } border`}
-                      >
-                        <input
-                          type="checkbox"
-                          className="sr-only"
-                          checked={formData.targetFilters.cities.includes(city)}
-                          onChange={() => handleCityToggle(city)}
-                        />
-                        {city}
-                      </label>
-                    ))}
+                  <div className="p-4 text-center text-sm text-gray-400">
+                    No leads match these filters
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">No cities available</p>
+                  leads.map((lead) => {
+                    const selected = selectedLeadIds.has(lead.id);
+                    return (
+                      <label
+                        key={lead.id}
+                        className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${
+                          selected ? 'bg-primary-50' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                          selected ? 'bg-primary-600 border-primary-600' : 'border-gray-300'
+                        }`}>
+                          {selected && <Check size={10} className="text-white" />}
+                        </div>
+                        <input type="checkbox" className="sr-only" checked={selected} onChange={() => toggleLead(lead.id)} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">
+                            {lead.businessName || lead.name || 'Unknown'}
+                          </div>
+                          <div className="text-xs text-gray-400 truncate">
+                            {lead.phone}{lead.city ? ` · ${lead.city}` : ''}
+                          </div>
+                        </div>
+                        <span className={`text-[10px] shrink-0 px-1.5 py-0.5 rounded-full font-medium ${statusColors[lead.status] || 'bg-gray-100 text-gray-500'}`}>
+                          {lead.status}
+                        </span>
+                      </label>
+                    );
+                  })
                 )}
               </div>
-              <p className="text-xs text-gray-500">
-                Leave empty to target all eligible leads
-              </p>
             </div>
-          )}
-
-          {/* Skip duplicate template */}
-          <label className="flex items-start gap-3 p-3 rounded-lg border bg-gray-50 cursor-pointer hover:bg-gray-100">
-            <input
-              type="checkbox"
-              className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              checked={skipDuplicate}
-              onChange={(e) => setSkipDuplicate(e.target.checked)}
-            />
-            <div>
-              <p className="text-sm font-medium text-gray-900">
-                Skip leads who already received this template
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Avoids sending the same message twice. Turn off if you want to resend to everyone.
-              </p>
-            </div>
-          </label>
-
-          {/* Sending Speed */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Sending Speed
-            </label>
-            <select
-              className="input"
-              value={sendingSpeed}
-              onChange={(e) => setSendingSpeed(e.target.value)}
-            >
-              <option value="warmup">Warmup — 1 msg every 30 min, max 10/day (for new numbers getting 131049)</option>
-              <option value="very_slow">Very Slow — 1 msg every 10 min</option>
-              <option value="slow">Slow — 1 msg every 5 min</option>
-              <option value="normal">Normal — 1 msg every 30s (established accounts only)</option>
-              <option value="fast">Fast — 1 msg every 5s (risky, may get throttled)</option>
-            </select>
-            <p className="text-xs text-gray-500 mt-1">
-              Getting 131049 errors? Use <strong>Warmup</strong> speed. It sends max 10 msgs/day with long gaps.
-              The campaign auto-pauses at the daily limit — resume it the next day to continue.
-            </p>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <button type="button" onClick={onClose} className="btn btn-secondary">
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending
-                ? 'Creating...'
-                : targetMode === 'select'
-                  ? `Create Campaign (${selectedLeadIds.size} leads)`
-                  : 'Create Campaign'}
+          {/* Footer */}
+          <div className="flex justify-end gap-2 px-4 pb-4 pt-2 border-t">
+            <button type="button" onClick={onClose} className="btn btn-secondary">Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={createMutation.isPending}>
+              {createMutation.isPending ? 'Creating...' : `Create Campaign (${selectedLeadIds.size} leads)`}
             </button>
           </div>
         </form>
@@ -753,4 +597,5 @@ function CreateCampaignModal({
     </div>
   );
 }
+
 
