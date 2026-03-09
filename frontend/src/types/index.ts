@@ -179,7 +179,7 @@ export interface MessageLogEntry {
   failedAt?: string;
   errorMessage?: string;
   createdAt: string;
-  template?: { name: string; bodyText: string; headerType?: string | null; headerContent?: string | null } | null;
+  template?: { name: string; bodyText: string; headerType?: string | null; headerContent?: string | null; buttons?: Array<{ type: string; text: string; url?: string; phone_number?: string }> | null } | null;
   campaign?: { name: string } | null;
 }
 

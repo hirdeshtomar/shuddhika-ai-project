@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, ArrowLeft, Send, Clock, Check, CheckCheck, AlertCircle,
-  FileText, X, User, Play, Image, Trash2, ChevronDown, MessageSquare, Paperclip, Mic,
+  FileText, X, User, Play, Image, Trash2, ChevronDown, MessageSquare, Paperclip, Mic, Download, ExternalLink, Phone,
 } from 'lucide-react';
 import { conversationsApi, templatesApi } from '../services/api';
 import type { Conversation, MessageLogEntry, MessageStatus, MessageTemplate } from '../types';
@@ -555,29 +555,92 @@ function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
   );
 }
 
+function MediaDownload({ mediaId, mediaType, filename }: { mediaId: string; mediaType: string; filename?: string }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const token = localStorage.getItem('token');
+  const baseUrl = (import.meta.env.VITE_API_URL || '') + '/api';
+  const proxyUrl = `${baseUrl}/conversations/media/${mediaId}`;
+  const isImage = mediaType === 'IMAGE';
+
+  const load = async () => {
+    if (blobUrl || loading) return;
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await fetch(proxyUrl, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error('Failed');
+      const blob = await res.blob();
+      setBlobUrl(URL.createObjectURL(blob));
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Auto-load images inline
+  useEffect(() => {
+    if (isImage) load();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (isImage) {
+    if (loading) return <div className="w-48 h-32 bg-black/10 rounded-lg mb-2 flex items-center justify-center"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400" /></div>;
+    if (blobUrl) return <img src={blobUrl} alt="" className="rounded-lg mb-2 max-w-full cursor-pointer" style={{ maxHeight: 240 }} onClick={() => window.open(blobUrl)} />;
+    if (error) return <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2"><Image size={16} className="text-gray-500" /><span className="text-xs text-gray-500">Image unavailable</span></div>;
+    return null;
+  }
+
+  // Non-image: show download button
+  const icon = mediaType === 'VIDEO' ? <Play size={15} /> : mediaType === 'AUDIO' ? <Mic size={15} /> : <FileText size={15} />;
+  const label = filename || (mediaType === 'VIDEO' ? 'Video' : mediaType === 'AUDIO' ? 'Voice message' : 'Document');
+
+  if (blobUrl) {
+    return (
+      <a href={blobUrl} download={filename || 'media'} className="flex items-center gap-2 bg-black/10 hover:bg-black/15 rounded-lg px-3 py-2 mb-2 transition-colors">
+        <Download size={15} className="text-gray-600" />
+        <span className="text-xs text-gray-700 truncate max-w-[160px]">{label}</span>
+      </a>
+    );
+  }
+
+  return (
+    <button onClick={load} disabled={loading} className="flex items-center gap-2 bg-black/10 hover:bg-black/15 rounded-lg px-3 py-2 mb-2 transition-colors disabled:opacity-60">
+      {loading ? <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-500" /> : icon}
+      <span className="text-xs text-gray-700 truncate max-w-[160px]">{error ? 'Tap to retry' : label}</span>
+      {!loading && !error && <Download size={13} className="text-gray-500 ml-auto" />}
+    </button>
+  );
+}
+
 function ChatBubble({ message, isNew }: { message: MessageLogEntry; isNew?: boolean }) {
   const isOutbound = message.direction === 'OUTBOUND';
 
   let textContent = message.content || message.template?.bodyText || '[Message]';
   let mediaUrl: string | undefined;
   let mediaType: string | undefined;
-
+  let mediaId: string | undefined;
   let filename: string | undefined;
+
   if (message.content && message.content.startsWith('{')) {
     try {
       const parsed = JSON.parse(message.content);
       textContent = parsed.text || message.template?.bodyText || '[Message]';
       mediaUrl = parsed.mediaUrl;
       mediaType = parsed.mediaType;
+      mediaId = parsed.mediaId;
       filename = parsed.filename;
     } catch { /* not JSON, use as-is */ }
   }
 
-  if (!mediaUrl && message.template?.headerType === 'VIDEO') {
+  if (!mediaUrl && !mediaId && message.template?.headerType === 'VIDEO') {
     mediaType = 'VIDEO';
-  } else if (!mediaUrl && message.template?.headerType === 'IMAGE') {
+  } else if (!mediaUrl && !mediaId && message.template?.headerType === 'IMAGE') {
     mediaType = 'IMAGE';
   }
+
+  const buttons = message.template?.buttons;
 
   return (
     <div className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}>
@@ -590,24 +653,17 @@ function ChatBubble({ message, isNew }: { message: MessageLogEntry; isNew?: bool
               : 'bg-white text-gray-900 rounded-tl-sm'
         }`}
       >
+        {/* Media rendering */}
         {mediaUrl && mediaType === 'VIDEO' ? (
           <video src={mediaUrl} controls className="rounded-lg mb-2 max-w-full" style={{ maxHeight: 240 }} />
         ) : mediaUrl && mediaType === 'IMAGE' ? (
-          <img src={mediaUrl} alt="" className="rounded-lg mb-2 max-w-full" style={{ maxHeight: 240 }} />
+          <img src={mediaUrl} alt="" className="rounded-lg mb-2 max-w-full" style={{ maxHeight: 240 }} onClick={() => window.open(mediaUrl)} />
+        ) : mediaId ? (
+          <MediaDownload mediaId={mediaId} mediaType={mediaType || 'DOCUMENT'} filename={filename} />
         ) : mediaType === 'VIDEO' ? (
           <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2">
             <Play size={16} className="text-gray-600" />
             <span className="text-xs text-gray-600">{filename || 'Video message'}</span>
-          </div>
-        ) : mediaType === 'IMAGE' ? (
-          <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2">
-            <Image size={16} className="text-gray-600" />
-            <span className="text-xs text-gray-600">{filename || 'Image message'}</span>
-          </div>
-        ) : mediaType === 'DOCUMENT' ? (
-          <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2">
-            <FileText size={16} className="text-gray-600" />
-            <span className="text-xs text-gray-600">{filename || 'Document'}</span>
           </div>
         ) : mediaType === 'AUDIO' ? (
           <div className="flex items-center gap-2 bg-black/10 rounded-lg px-3 py-2 mb-2">
@@ -615,7 +671,25 @@ function ChatBubble({ message, isNew }: { message: MessageLogEntry; isNew?: bool
             <span className="text-xs text-gray-600">Voice message</span>
           </div>
         ) : null}
+
         <p className="whitespace-pre-wrap break-words overflow-hidden">{textContent}</p>
+
+        {/* Template buttons */}
+        {buttons && buttons.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-black/10 space-y-1.5">
+            {(buttons as Array<{ type: string; text: string; url?: string; phone_number?: string }>).map((btn, i) => (
+              <div key={i} className={`flex items-center justify-center gap-1.5 py-1 px-2 rounded-lg text-xs font-medium ${
+                btn.type === 'URL' ? 'text-blue-600 bg-blue-50' :
+                btn.type === 'PHONE_NUMBER' ? 'text-green-700 bg-green-50' :
+                'text-primary-600 bg-primary-50'
+              }`}>
+                {btn.type === 'URL' ? <ExternalLink size={12} /> : btn.type === 'PHONE_NUMBER' ? <Phone size={12} /> : null}
+                {btn.text}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className={`flex items-center gap-1 mt-1 ${isOutbound ? 'justify-end' : ''}`}>
           <span className="text-[10px] text-gray-500">
             {formatTime(message.sentAt || message.createdAt)}

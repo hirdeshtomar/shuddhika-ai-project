@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Response, Request } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/database.js';
 import { authenticate } from '../middleware/auth.js';
@@ -95,6 +95,52 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<Ap
   });
 });
 
+// GET /api/conversations/media/:mediaId - Proxy inbound WhatsApp media for viewing/downloading
+router.get('/media/:mediaId', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const { mediaId } = req.params;
+  const accessToken = env.WHATSAPP_ACCESS_TOKEN;
+
+  if (!accessToken) {
+    res.status(503).json({ error: 'WhatsApp not configured' });
+    return;
+  }
+
+  // Step 1: Get media download URL from Meta
+  const metaRes = await fetch(`https://graph.facebook.com/v22.0/${mediaId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!metaRes.ok) {
+    res.status(404).json({ error: 'Media not found or expired' });
+    return;
+  }
+
+  const metaData = (await metaRes.json()) as { url?: string; mime_type?: string; file_size?: number };
+
+  if (!metaData.url) {
+    res.status(404).json({ error: 'Media URL not available' });
+    return;
+  }
+
+  // Step 2: Proxy the actual file
+  const fileRes = await fetch(metaData.url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!fileRes.ok || !fileRes.body) {
+    res.status(502).json({ error: 'Failed to retrieve media' });
+    return;
+  }
+
+  res.setHeader('Content-Type', metaData.mime_type || 'application/octet-stream');
+  if (metaData.file_size) res.setHeader('Content-Length', metaData.file_size);
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+
+  // Stream the file through
+  const { Readable } = await import('stream');
+  Readable.fromWeb(fileRes.body as any).pipe(res);
+});
+
 // GET /api/conversations/:leadId/messages - Full message history for a lead
 router.get('/:leadId/messages', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
   const leadId = req.params.leadId;
@@ -138,7 +184,7 @@ router.get('/:leadId/messages', authenticate, async (req: AuthenticatedRequest, 
         errorMessage: true,
         createdAt: true,
         template: {
-          select: { name: true, bodyText: true, headerType: true, headerContent: true },
+          select: { name: true, bodyText: true, headerType: true, headerContent: true, buttons: true },
         },
         campaign: {
           select: { name: true },

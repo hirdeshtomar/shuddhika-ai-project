@@ -175,22 +175,26 @@ function extractMessageContent(message: WhatsAppIncomingMessage): string {
       return JSON.stringify({
         text: message.image?.caption || 'Photo',
         mediaType: 'IMAGE',
+        mediaId: message.image?.id,
       });
     case 'video':
       return JSON.stringify({
         text: message.video?.caption || 'Video',
         mediaType: 'VIDEO',
+        mediaId: message.video?.id,
       });
     case 'document':
       return JSON.stringify({
         text: message.document?.caption || message.document?.filename || 'Document',
         mediaType: 'DOCUMENT',
         filename: message.document?.filename,
+        mediaId: message.document?.id,
       });
     case 'audio':
       return JSON.stringify({
         text: 'Voice message',
         mediaType: 'AUDIO',
+        mediaId: message.audio?.id,
       });
     case 'reaction':
       return message.reaction?.emoji || ''; // empty = reaction removed, will be skipped
