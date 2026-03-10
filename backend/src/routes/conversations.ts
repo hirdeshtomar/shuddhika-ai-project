@@ -4,6 +4,7 @@ import { prisma } from '../config/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest, ApiResponse } from '../types/index.js';
+import { env } from '../config/env.js';
 import { whatsappClient } from '../services/whatsapp/client.js';
 import multer from 'multer';
 
