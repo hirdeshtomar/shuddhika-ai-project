@@ -268,7 +268,7 @@ router.post('/sync', authenticate, async (req: AuthenticatedRequest, res: Respon
         status,
       };
 
-      // Only sync header type/format (not bodyText which has correct variable names)
+      // Only sync header/footer/buttons (not bodyText which has correct variable names)
       if (waTemplate.components) {
         for (const component of waTemplate.components) {
           if (component.type === 'FOOTER') {
@@ -276,6 +276,13 @@ router.post('/sync', authenticate, async (req: AuthenticatedRequest, res: Respon
           } else if (component.type === 'HEADER') {
             updateData.headerType = component.format || 'TEXT';
             if (component.text) updateData.headerContent = component.text;
+          } else if (component.type === 'BUTTONS' && component.buttons) {
+            updateData.buttons = (component.buttons as any[]).map((btn: any) => ({
+              type: btn.type,
+              text: btn.text,
+              ...(btn.url && { url: btn.url }),
+              ...(btn.phone_number && { phone_number: btn.phone_number }),
+            }));
           }
         }
       }
@@ -294,6 +301,7 @@ router.post('/sync', authenticate, async (req: AuthenticatedRequest, res: Respon
       let headerType = null;
       let headerContent = null;
 
+      let buttons: any[] | null = null;
       if (waTemplate.components) {
         for (const component of waTemplate.components) {
           if (component.type === 'BODY') {
@@ -303,6 +311,13 @@ router.post('/sync', authenticate, async (req: AuthenticatedRequest, res: Respon
           } else if (component.type === 'HEADER') {
             headerType = component.format || 'TEXT';
             headerContent = component.text || '';
+          } else if (component.type === 'BUTTONS' && component.buttons) {
+            buttons = (component.buttons as any[]).map((btn: any) => ({
+              type: btn.type,
+              text: btn.text,
+              ...(btn.url && { url: btn.url }),
+              ...(btn.phone_number && { phone_number: btn.phone_number }),
+            }));
           }
         }
       }
@@ -318,6 +333,7 @@ router.post('/sync', authenticate, async (req: AuthenticatedRequest, res: Respon
           footerText: footerText || null,
           headerType,
           headerContent,
+          buttons: buttons ?? undefined,
           whatsappTemplateId: waTemplate.id,
           whatsappTemplateName: waTemplate.name,
           status,
