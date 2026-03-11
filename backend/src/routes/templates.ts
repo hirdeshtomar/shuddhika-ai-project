@@ -270,19 +270,26 @@ router.post('/sync', authenticate, async (req: AuthenticatedRequest, res: Respon
 
       // Only sync header/footer/buttons (not bodyText which has correct variable names)
       if (waTemplate.components) {
+        const componentTypes = waTemplate.components.map((c: any) => c.type).join(', ');
+        console.log(`[Sync] ${waTemplate.name} components: [${componentTypes}]`);
         for (const component of waTemplate.components) {
-          if (component.type === 'FOOTER') {
+          const type = (component.type as string).toUpperCase();
+          if (type === 'FOOTER') {
             updateData.footerText = component.text || null;
-          } else if (component.type === 'HEADER') {
-            updateData.headerType = component.format || 'TEXT';
+          } else if (type === 'HEADER') {
+            updateData.headerType = component.format?.toUpperCase() || 'TEXT';
             if (component.text) updateData.headerContent = component.text;
-          } else if (component.type === 'BUTTONS' && component.buttons) {
-            updateData.buttons = (component.buttons as any[]).map((btn: any) => ({
-              type: btn.type,
-              text: btn.text,
-              ...(btn.url && { url: btn.url }),
-              ...(btn.phone_number && { phone_number: btn.phone_number }),
-            }));
+          } else if (type === 'BUTTONS') {
+            const rawButtons = component.buttons || component.button || [];
+            if (rawButtons.length > 0) {
+              updateData.buttons = rawButtons.map((btn: any) => ({
+                type: (btn.type as string).toUpperCase(),
+                text: btn.text,
+                ...(btn.url && { url: btn.url }),
+                ...(btn.phone_number && { phone_number: btn.phone_number }),
+              }));
+              console.log(`[Sync] ${waTemplate.name} buttons: ${JSON.stringify(updateData.buttons)}`);
+            }
           }
         }
       }
@@ -292,7 +299,7 @@ router.post('/sync', authenticate, async (req: AuthenticatedRequest, res: Respon
         data: updateData,
       });
       synced++;
-      console.log(`Updated: ${waTemplate.name} (${status}, lang: ${waTemplate.language})`);
+      console.log(`Updated: ${waTemplate.name} (${status}, lang: ${waTemplate.language}, buttons: ${updateData.buttons?.length ?? 'none'})`);
     } else {
       // Import new template from WhatsApp
       // Extract body text from components
@@ -304,20 +311,24 @@ router.post('/sync', authenticate, async (req: AuthenticatedRequest, res: Respon
       let buttons: any[] | null = null;
       if (waTemplate.components) {
         for (const component of waTemplate.components) {
-          if (component.type === 'BODY') {
+          const type = (component.type as string).toUpperCase();
+          if (type === 'BODY') {
             bodyText = component.text || '';
-          } else if (component.type === 'FOOTER') {
+          } else if (type === 'FOOTER') {
             footerText = component.text || '';
-          } else if (component.type === 'HEADER') {
-            headerType = component.format || 'TEXT';
+          } else if (type === 'HEADER') {
+            headerType = component.format?.toUpperCase() || 'TEXT';
             headerContent = component.text || '';
-          } else if (component.type === 'BUTTONS' && component.buttons) {
-            buttons = (component.buttons as any[]).map((btn: any) => ({
-              type: btn.type,
-              text: btn.text,
-              ...(btn.url && { url: btn.url }),
-              ...(btn.phone_number && { phone_number: btn.phone_number }),
-            }));
+          } else if (type === 'BUTTONS') {
+            const rawButtons = component.buttons || component.button || [];
+            if (rawButtons.length > 0) {
+              buttons = rawButtons.map((btn: any) => ({
+                type: (btn.type as string).toUpperCase(),
+                text: btn.text,
+                ...(btn.url && { url: btn.url }),
+                ...(btn.phone_number && { phone_number: btn.phone_number }),
+              }));
+            }
           }
         }
       }
