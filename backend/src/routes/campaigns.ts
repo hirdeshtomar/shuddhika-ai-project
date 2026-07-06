@@ -4,19 +4,13 @@ import { prisma } from '../config/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest, ApiResponse, CreateCampaignInput } from '../types/index.js';
-import { sendCampaignMessage, whatsappClient } from '../services/whatsapp/client.js';
+import { whatsappClient } from '../services/whatsapp/client.js';
 
 const router = Router();
 
 // Validation schemas
-// Sending speed presets (delay in ms between messages)
-const SENDING_SPEEDS: Record<string, { delayMs: number; label: string; dailyLimit?: number }> = {
-  fast: { delayMs: 5_000, label: '1 per 5s' },             // ~12/min — risky for new numbers
-  normal: { delayMs: 30_000, label: '1 per 30s' },          // ~2/min — safe for established accounts
-  slow: { delayMs: 300_000, label: '1 per 5min' },          // safe for newer numbers
-  very_slow: { delayMs: 600_000, label: '1 per 10min' },    // for accounts with warnings
-  warmup: { delayMs: 1_800_000, label: '1 per 30min', dailyLimit: 10 }, // for new numbers getting 131049
-};
+// Sending is handled by the cron tick (services/campaignTick.ts).
+// Once a campaign is RUNNING, the tick picks it up within a minute.
 
 const createCampaignSchema = z.object({
   name: z.string().min(1, 'Campaign name is required'),
@@ -362,16 +356,18 @@ router.post('/:id/start', authenticate, async (req: AuthenticatedRequest, res: R
     },
   });
 
-  // Send messages in the background (non-blocking)
-  // Respond immediately, process sends asynchronously
-  const headerMediaUrl = (campaign.targetFilters as any)?.headerMediaUrl;
-  const sendingSpeed = forcedSpeed || (campaign.targetFilters as any)?.sendingSpeed || 'normal';
-  processCampaignMessages(campaign.id, campaign.templateId, leads.map(l => l.id), headerMediaUrl, sendingSpeed)
-    .catch(err => console.error(`Campaign ${campaign.id} send error:`, err));
+  // Persist forced speed (quality YELLOW) so the cron tick respects it
+  if (forcedSpeed) {
+    await prisma.campaign.update({
+      where: { id: campaign.id },
+      data: { targetFilters: { ...targetFilters, sendingSpeed: forcedSpeed } },
+    });
+  }
 
+  // Sending starts within a minute via the campaign tick cron
   res.json({
     success: true,
-    message: `Campaign started. Sending messages to ${leads.length} leads.`,
+    message: `Campaign started. ${leads.length} messages will begin sending within a minute.`,
     data: { leadsCount: leads.length },
   });
 });
@@ -451,15 +447,10 @@ router.post('/:id/resend', authenticate, async (req: AuthenticatedRequest, res: 
     data: { status: 'RUNNING' },
   });
 
-  // Process in background
-  const resendHeaderMediaUrl = (campaign.targetFilters as any)?.headerMediaUrl;
-  const resendSpeed = (campaign.targetFilters as any)?.sendingSpeed || 'normal';
-  processCampaignMessages(campaign.id, campaign.templateId, pendingLeads.map(l => l.leadId), resendHeaderMediaUrl, resendSpeed)
-    .catch(err => console.error(`Campaign ${campaign.id} resend error:`, err));
-
+  // The campaign tick cron picks up PENDING leads within a minute
   res.json({
     success: true,
-    message: `Sending ${pendingLeads.length} pending messages.`,
+    message: `${pendingLeads.length} pending messages will resume sending within a minute.`,
     data: { pendingCount: pendingLeads.length },
   });
 });
@@ -509,15 +500,10 @@ router.post('/:id/retry-failed', authenticate, async (req: AuthenticatedRequest,
     data: { status: 'RUNNING' },
   });
 
-  // Process in background
-  const retryHeaderMediaUrl = (campaign.targetFilters as any)?.headerMediaUrl;
-  const retrySpeed = (campaign.targetFilters as any)?.sendingSpeed || 'normal';
-  processCampaignMessages(campaign.id, campaign.templateId, failedLeads.map((l) => l.leadId), retryHeaderMediaUrl, retrySpeed)
-    .catch((err) => console.error(`Campaign ${campaign.id} retry-failed error:`, err));
-
+  // The campaign tick cron picks up the reset PENDING leads within a minute
   res.json({
     success: true,
-    message: `Retrying ${failedLeads.length} failed messages.`,
+    message: `${failedLeads.length} failed messages queued for retry.`,
     data: { retryCount: failedLeads.length },
   });
 });
@@ -663,189 +649,5 @@ router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Respo
 
   res.json({ success: true, message: 'Campaign deleted' });
 });
-
-/**
- * Process campaign messages in the background without Redis/BullMQ.
- * Sends one message at a time with a delay to respect WhatsApp rate limits.
- * Checks campaign status before each send so pause/cancel takes effect.
- */
-async function processCampaignMessages(
-  campaignId: string,
-  templateId: string,
-  leadIds: string[],
-  headerMediaUrl?: string,
-  sendingSpeed: string = 'normal'
-): Promise<void> {
-  const speedConfig = SENDING_SPEEDS[sendingSpeed] ?? SENDING_SPEEDS['normal']!;
-  const BASE_DELAY = speedConfig.delayMs;
-  const DAILY_LIMIT = speedConfig.dailyLimit || 0; // 0 = no limit
-  const RATE_WINDOW = 20;        // rolling window size for success rate check
-  const MIN_SUCCESS_RATE = 0.60; // auto-pause if success rate drops below 60%
-
-  // Error codes that mean Meta is flagging US — stop immediately, don't burn quality rating
-  const FATAL_ERROR_CODES = new Set([
-    131048, // Spam rate limit hit — business is being throttled for spam
-    368,    // Temporarily blocked for policy violations
-    130429, // Rate limit hit
-    131056, // (Business, consumer) pair rate limit — too many sends to same region/user
-  ]);
-
-  // Only send during business hours (IST). Messages outside this window feel
-  // like spam and get blocked/reported far more often.
-  const SEND_HOUR_START = 9;  // 9 AM IST
-  const SEND_HOUR_END = 21;   // 9 PM IST
-  const istHour = () => (new Date().getUTCHours() + 5.5) % 24;
-
-  // Global cap across ALL campaigns per calendar day (protects quality rating)
-  const GLOBAL_DAILY_CAP = parseInt(process.env.CAMPAIGN_GLOBAL_DAILY_CAP || '250', 10);
-  const startOfToday = () => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  };
-
-  console.log(`[Campaign ${campaignId}] Starting to send ${leadIds.length} messages (speed: ${sendingSpeed}, delay: ${BASE_DELAY / 1000}s${DAILY_LIMIT ? `, daily limit: ${DAILY_LIMIT}` : ''})`);
-  let sent = 0;
-  let failed = 0;
-  const recentOutcomes: boolean[] = []; // rolling window of last RATE_WINDOW outcomes
-
-  for (const leadId of leadIds) {
-    // Check if campaign is still running (allows pause/cancel)
-    const campaign = await prisma.campaign.findUnique({
-      where: { id: campaignId },
-      select: { status: true },
-    });
-
-    if (!campaign || campaign.status !== 'RUNNING') {
-      console.log(`[Campaign ${campaignId}] Stopped — status is ${campaign?.status}`);
-      break;
-    }
-
-    // Enforce daily limit: pause campaign when reached, user can resume tomorrow
-    if (DAILY_LIMIT > 0 && sent >= DAILY_LIMIT) {
-      console.log(`[Campaign ${campaignId}] Daily limit of ${DAILY_LIMIT} reached — auto-pausing`);
-      await prisma.campaign.update({
-        where: { id: campaignId },
-        data: { status: 'PAUSED' },
-      });
-      break;
-    }
-
-    // Business hours check: pause outside 9 AM – 9 PM IST
-    const hour = istHour();
-    if (hour < SEND_HOUR_START || hour >= SEND_HOUR_END) {
-      console.log(`[Campaign ${campaignId}] Outside business hours (${hour.toFixed(1)} IST) — auto-pausing. Resume during 9 AM–9 PM.`);
-      await prisma.campaign.update({
-        where: { id: campaignId },
-        data: { status: 'PAUSED' },
-      });
-      break;
-    }
-
-    // Global daily cap across all campaigns
-    const sentToday = await prisma.messageLog.count({
-      where: {
-        direction: 'OUTBOUND',
-        channel: 'WHATSAPP',
-        sentAt: { gte: startOfToday() },
-      },
-    });
-    if (sentToday >= GLOBAL_DAILY_CAP) {
-      console.log(`[Campaign ${campaignId}] Global daily cap of ${GLOBAL_DAILY_CAP} messages reached — auto-pausing`);
-      await prisma.campaign.update({
-        where: { id: campaignId },
-        data: { status: 'PAUSED' },
-      });
-      break;
-    }
-
-    try {
-      const result = await sendCampaignMessage(leadId, campaignId, templateId, [], headerMediaUrl);
-
-      // Update campaign-lead status
-      const newStatus = result.success ? 'SENT' : 'FAILED';
-      await prisma.campaignLead.updateMany({
-        where: { campaignId, leadId },
-        data: { status: newStatus },
-      });
-
-      if (result.success) {
-        sent++;
-      } else {
-        failed++;
-        console.log(`[Campaign ${campaignId}] Failed for lead ${leadId}: [${result.errorCode}] ${result.error}`);
-
-        // Fatal error: Meta is throttling/blocking us. Stop NOW — every further
-        // send digs the hole deeper and risks losing the number.
-        if (result.errorCode && FATAL_ERROR_CODES.has(result.errorCode)) {
-          console.log(`[Campaign ${campaignId}] FATAL error ${result.errorCode} — auto-pausing immediately. Wait several hours (or a day) before resuming at a slower speed.`);
-          await prisma.campaign.update({
-            where: { id: campaignId },
-            data: { status: 'PAUSED', sentCount: sent, failedCount: failed },
-          });
-          break;
-        }
-      }
-
-      // Update rolling window and check success rate
-      recentOutcomes.push(result.success);
-      if (recentOutcomes.length > RATE_WINDOW) recentOutcomes.shift();
-
-      if (recentOutcomes.length === RATE_WINDOW) {
-        const successCount = recentOutcomes.filter(Boolean).length;
-        const successRate = successCount / RATE_WINDOW;
-        if (successRate < MIN_SUCCESS_RATE) {
-          console.log(`[Campaign ${campaignId}] Success rate dropped to ${Math.round(successRate * 100)}% over last ${RATE_WINDOW} messages — auto-pausing`);
-          await prisma.campaign.update({
-            where: { id: campaignId },
-            data: { status: 'PAUSED', failedCount: failed },
-          });
-          break;
-        }
-      }
-
-      // Update campaign counters
-      await prisma.campaign.update({
-        where: { id: campaignId },
-        data: {
-          sentCount: sent,
-          failedCount: failed,
-        },
-      });
-    } catch (err: any) {
-      failed++;
-      console.error(`[Campaign ${campaignId}] Error sending to ${leadId}:`, err.message);
-
-      await prisma.campaignLead.updateMany({
-        where: { campaignId, leadId },
-        data: { status: 'FAILED' },
-      });
-    }
-
-    // Rate limit: configured delay + random jitter (up to 10% of delay) to appear natural
-    const jitter = Math.floor(Math.random() * Math.max(BASE_DELAY * 0.1, 2000));
-    await new Promise(resolve => setTimeout(resolve, BASE_DELAY + jitter));
-  }
-
-  // Mark campaign as completed if it's still running
-  const finalCampaign = await prisma.campaign.findUnique({
-    where: { id: campaignId },
-    select: { status: true },
-  });
-
-  if (finalCampaign?.status === 'RUNNING') {
-    await prisma.campaign.update({
-      where: { id: campaignId },
-      data: {
-        status: 'COMPLETED',
-        completedAt: new Date(),
-        sentCount: sent,
-        failedCount: failed,
-      },
-    });
-  }
-
-  console.log(`[Campaign ${campaignId}] Done — sent: ${sent}, failed: ${failed}`);
-}
 
 export default router;

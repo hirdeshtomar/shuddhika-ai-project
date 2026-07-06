@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")   // Supabase: pooled connection (port 6543, pgbouncer=true)
+  directUrl = env("DIRECT_URL")     // Supabase: direct connection (port 5432) for migrations
 }
 
 // User model for dashboard authentication
@@ -148,6 +149,9 @@ model Campaign {
   scheduledAt   DateTime?
   startedAt     DateTime?
   completedAt   DateTime?
+
+  // Cron-tick sending state
+  lastSendAt    DateTime?
 
   // Stats (denormalized for quick access)
   totalLeads    Int @default(0)
