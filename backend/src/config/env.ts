@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -14,8 +15,10 @@ const envSchema = z.object({
   // Redis (optional - queue system disabled if not provided)
   REDIS_URL: z.string().optional(),
 
-  // JWT
-  JWT_SECRET: z.string().min(32),
+  // JWT — optional while login is disabled; falls back to a per-instance
+  // random secret (tokens won't survive restarts, which is fine with auth off)
+  JWT_SECRET: z.string().min(32).optional()
+    .transform((v) => v ?? crypto.randomBytes(32).toString('hex')),
   JWT_EXPIRES_IN: z.string().default('7d'),
 
   // WhatsApp
@@ -45,9 +48,11 @@ const envSchema = z.object({
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
-  console.error('❌ Invalid environment variables:');
-  console.error(parsed.error.format());
-  process.exit(1);
+  const problems = parsed.error.issues
+    .map((i) => `${i.path.join('.')}: ${i.message}`)
+    .join('; ');
+  // Throw (don't process.exit) so serverless logs show WHICH variable is wrong
+  throw new Error(`Invalid environment variables — ${problems}`);
 }
 
 export const env = parsed.data;
