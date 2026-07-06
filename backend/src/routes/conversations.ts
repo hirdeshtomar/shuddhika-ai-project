@@ -107,7 +107,7 @@ router.get('/media/:mediaId', authenticate, async (req: AuthenticatedRequest, re
   }
 
   // Step 1: Get media download URL from Meta
-  const metaRes = await fetch(`https://graph.facebook.com/v22.0/${mediaId}`, {
+  const metaRes = await fetch(`https://graph.facebook.com/v23.0/${mediaId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 

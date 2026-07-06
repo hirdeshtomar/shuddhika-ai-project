@@ -26,7 +26,7 @@ const envSchema = z.object({
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().optional(),
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
-  WHATSAPP_API_URL: z.string().default('https://graph.facebook.com/v18.0'),
+  WHATSAPP_API_URL: z.string().default('https://graph.facebook.com/v23.0'),
 
   // Push Notifications (VAPID)
   VAPID_PUBLIC_KEY: z.string().optional(),

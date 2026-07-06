@@ -37,7 +37,7 @@ In the Vercel dashboard → your project → **Settings**:
    | `WHATSAPP_ACCESS_TOKEN` | from your Meta app (same value as before) |
    | `WHATSAPP_PHONE_NUMBER_ID` | `1062803690239188` |
    | `WHATSAPP_BUSINESS_ACCOUNT_ID` | `940023388375861` |
-   | `WHATSAPP_API_URL` | `https://graph.facebook.com/v18.0` |
+   | `WHATSAPP_API_URL` | `https://graph.facebook.com/v23.0` |
    | `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | same value as before (from old Railway vars) |
    | `GOOGLE_MAPS_API_KEY` | your new key |
    | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | same as before (`mailto:hirdesh2008@gmail.com` for subject) |
