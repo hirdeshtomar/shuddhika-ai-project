@@ -7,14 +7,12 @@ import {
   Search,
   MessageSquare,
   MessageSquareReply,
-  LogOut,
   Menu,
   X,
   Bell,
   BellOff,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useAuth } from '../hooks/useAuth';
 import { pushApi } from '../services/api';
 
 const navigation = [
@@ -99,7 +97,7 @@ function urlBase64ToUint8Array(base64String: string) {
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, logout } = useAuth();
+  // AUTH DISABLED: login removed for now, so no user session here
   const notifications = useNotifications();
 
   return (
@@ -156,15 +154,13 @@ export default function Layout() {
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-              <span className="text-gray-600 text-sm font-medium">
-                {user?.name?.charAt(0).toUpperCase()}
-              </span>
+              <span className="text-gray-600 text-sm font-medium">S</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">
-                {user?.name}
+                Shuddhika Team
               </p>
-              <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+              <p className="text-xs text-gray-500 truncate">Pure Mustard Oil</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -180,12 +176,6 @@ export default function Layout() {
             >
               {notifications.enabled ? <Bell size={18} /> : <BellOff size={18} />}
               {notifications.enabled ? 'Alerts on' : 'Alerts off'}
-            </button>
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <LogOut size={18} />
             </button>
           </div>
         </div>

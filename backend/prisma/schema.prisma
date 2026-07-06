@@ -45,6 +45,9 @@ model Lead {
   pincode      String?
   address      String?
 
+  // Relevance for mustard oil sales (0-100, higher = better prospect)
+  relevanceScore Int @default(0)
+
   // Engagement tracking
   lastContactedAt DateTime?
   notes           String?

@@ -273,6 +273,27 @@ export class WhatsAppClient {
   }
 
   /**
+   * Get phone number quality rating from Meta.
+   * GREEN = healthy, YELLOW = at risk, RED = about to be restricted.
+   */
+  async getPhoneNumberQuality(): Promise<{
+    qualityRating: string | null;
+    error?: string;
+  }> {
+    try {
+      const response = await this.client.get(`/${this.phoneNumberId}`, {
+        params: { fields: 'quality_rating,display_phone_number' },
+      });
+      return { qualityRating: response.data?.quality_rating || null };
+    } catch (error: any) {
+      return {
+        qualityRating: null,
+        error: error.response?.data?.error?.message || error.message,
+      };
+    }
+  }
+
+  /**
    * Build template components with parameters
    * bodyParams: Array of { name, value } where name is the variable name from the template
    */

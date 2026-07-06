@@ -10,8 +10,12 @@ import Scraper from './pages/Scraper';
 import CampaignDetail from './pages/CampaignDetail';
 import Conversations from './pages/Conversations';
 import AutoReplies from './pages/AutoReplies';
-import Login from './pages/Login';
-import { useAuth } from './hooks/useAuth';
+// ============================================================
+// AUTH DISABLED (temporary): login is bypassed. To restore:
+// re-add PrivateRoute around <Layout /> and the /login route
+// (git history has the original), and set AUTH_DISABLED = false
+// in backend/src/middleware/auth.ts.
+// ============================================================
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,32 +26,12 @@ const queryClient = new QueryClient({
   },
 });
 
-function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-      </div>
-    );
-  }
-
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
-}
-
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route
-        path="/"
-        element={
-          <PrivateRoute>
-            <Layout />
-          </PrivateRoute>
-        }
-      >
+      {/* Login removed — send any old /login links home */}
+      <Route path="/login" element={<Navigate to="/" replace />} />
+      <Route path="/" element={<Layout />}>
         <Route index element={<Dashboard />} />
         <Route path="leads" element={<Leads />} />
         <Route path="campaigns" element={<Campaigns />} />

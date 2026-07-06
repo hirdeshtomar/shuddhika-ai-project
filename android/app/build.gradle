@@ -1,0 +1,46 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.shuddhika.leads'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.shuddhika.leads"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        // The web app this TWA wraps
+        resValue "string", "launchUrl", "https://shuddhika-ai-project.vercel.app"
+        resValue "string", "hostName", "shuddhika-ai-project.vercel.app"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("../shuddhika-release.keystore")
+            storePassword project.findProperty("SHUDDHIKA_STORE_PASSWORD") ?: System.getenv("SHUDDHIKA_STORE_PASSWORD") ?: "CHANGE_ME"
+            keyAlias "shuddhika"
+            keyPassword project.findProperty("SHUDDHIKA_KEY_PASSWORD") ?: System.getenv("SHUDDHIKA_KEY_PASSWORD") ?: "CHANGE_ME"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+        }
+        debug {
+            // Debug builds use the same release keystore so digital asset links
+            // verification works in the emulator too
+            signingConfig signingConfigs.release
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.shuddhika.leads",
+      "sha256_cert_fingerprints": [
+        "AB:B2:05:4D:5A:CC:2D:01:E2:B0:32:AB:59:85:B0:0C:3F:30:D6:00:3F:3E:F3:FD:E6:D8:1D:22:D9:40:30:8C"
+      ]
+    }
+  }
+]

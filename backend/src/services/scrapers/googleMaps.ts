@@ -167,6 +167,75 @@ function extractBusinessType(types?: string[]): string {
 }
 
 /**
+ * Score how relevant a business is as a mustard oil buyer (0-100).
+ * Based on Google Places types + business name keywords.
+ * Leads scoring below MIN_RELEVANCE_SCORE are skipped entirely.
+ */
+export const MIN_RELEVANCE_SCORE = 30;
+
+// Place types that will never buy mustard oil in bulk — skip outright
+const IRRELEVANT_TYPES = new Set([
+  'school', 'university', 'hospital', 'doctor', 'dentist', 'pharmacy',
+  'bank', 'atm', 'insurance_agency', 'real_estate_agency', 'lawyer',
+  'gym', 'beauty_salon', 'hair_care', 'spa', 'car_repair', 'car_dealer',
+  'gas_station', 'electronics_store', 'hardware_store', 'clothing_store',
+  'shoe_store', 'jewelry_store', 'mobile_phone_store', 'furniture_store',
+  'travel_agency', 'church', 'hindu_temple', 'mosque', 'movie_theater',
+]);
+
+const TYPE_SCORES: Record<string, number> = {
+  // Direct resellers of cooking oil
+  grocery_store: 70,
+  supermarket: 65,
+  convenience_store: 60,
+  department_store: 40,
+  // Bulk consumers
+  restaurant: 55,
+  meal_takeaway: 55,
+  meal_delivery: 50,
+  catering_service: 65,
+  hotel: 45,
+  lodging: 40,
+  bakery: 40,
+  cafe: 30,
+  food: 50,
+  // Generic retail — could go either way
+  store: 35,
+  shopping_mall: 30,
+};
+
+// Name keywords signalling a high-intent mustard oil buyer
+const NAME_KEYWORD_SCORES: Array<{ pattern: RegExp; score: number }> = [
+  { pattern: /\b(oil|tel|ghani|tail)\b/i, score: 95 },          // oil traders/mills
+  { pattern: /\b(pickle|achar|aachar|papad|namkeen|masala|spice)\b/i, score: 85 },
+  { pattern: /\b(kirana|kiryana|provision|general\s*stores?)\b/i, score: 80 },
+  { pattern: /\b(wholesale|wholesaler|traders?|trading|distributors?)\b/i, score: 75 },
+  { pattern: /\b(sweets?|halwai|mithai|misthan)\b/i, score: 75 },
+  { pattern: /\b(dhaba|bhojanalay|caterers?|catering)\b/i, score: 70 },
+  { pattern: /\b(super\s*market|supermart|departmental)\b/i, score: 60 },
+];
+
+export function scoreRelevance(name: string, types?: string[]): number {
+  const hasIrrelevantType = (types || []).some((t) => IRRELEVANT_TYPES.has(t));
+
+  // Best score from name keywords — explicit intent always wins over type
+  let nameScore = 0;
+  for (const { pattern, score } of NAME_KEYWORD_SCORES) {
+    if (pattern.test(name) && score > nameScore) nameScore = score;
+  }
+  if (nameScore > 0) return nameScore;
+
+  if (hasIrrelevantType) return 0;
+
+  let typeScore = 0;
+  for (const t of types || []) {
+    const s = TYPE_SCORES[t];
+    if (s && s > typeScore) typeScore = s;
+  }
+  return typeScore;
+}
+
+/**
  * Extract city from address
  */
 function extractCity(address?: string): string | null {
@@ -222,6 +291,22 @@ async function processPlaces(
         continue;
       }
 
+      // Skip permanently closed businesses
+      if (place.businessStatus && place.businessStatus !== 'OPERATIONAL') {
+        continue;
+      }
+
+      // Relevance filter: skip businesses unlikely to buy mustard oil
+      let relevanceScore = scoreRelevance(businessName, place.types);
+      if (relevanceScore < MIN_RELEVANCE_SCORE) {
+        continue;
+      }
+
+      // Small boost for established businesses (many reviews = real, active shop)
+      if ((place.userRatingCount || 0) >= 50) {
+        relevanceScore = Math.min(100, relevanceScore + 5);
+      }
+
       // Check for duplicate
       const existing = await prisma.lead.findUnique({
         where: { phone },
@@ -243,6 +328,7 @@ async function processPlaces(
           city: extractCity(place.formattedAddress) || fallbackCity,
           source: 'GOOGLE_MAPS',
           status: 'NEW',
+          relevanceScore,
           notes: place.rating
             ? `Rating: ${place.rating}/5 (${place.userRatingCount || 0} reviews)`
             : undefined,
@@ -680,16 +766,24 @@ export function getDeepSearchCities(): string[] {
  */
 export function getSuggestedSearches(): Array<{ query: string; description: string }> {
   return [
-    { query: 'grocery stores', description: 'Local grocery and kirana stores' },
-    { query: 'supermarket', description: 'Supermarkets and hypermarkets' },
-    { query: 'wholesale grocery', description: 'Wholesale grocery distributors' },
+    // Highest intent: already trade in edible oil
+    { query: 'edible oil wholesaler', description: 'Oil wholesalers — resell your oil directly' },
+    { query: 'mustard oil dealer', description: 'Existing mustard oil dealers and traders' },
     { query: 'oil merchants', description: 'Edible oil dealers and distributors' },
+    { query: 'oil mill', description: 'Oil mills — trade khal (oil cake) and bulk oil' },
+    // Resellers
+    { query: 'kirana store', description: 'Kirana stores — steady repeat buyers' },
+    { query: 'wholesale grocery', description: 'Wholesale grocery distributors' },
     { query: 'provision stores', description: 'Provision and general stores' },
-    { query: 'restaurants', description: 'Restaurants and hotels (bulk buyers)' },
+    { query: 'grocery stores', description: 'Local grocery stores' },
+    { query: 'supermarket', description: 'Supermarkets and hypermarkets' },
+    // Bulk consumers
+    { query: 'pickle manufacturers', description: 'Pickle makers — large pure-oil buyers' },
+    { query: 'namkeen manufacturers', description: 'Namkeen and snack makers' },
     { query: 'sweet shops', description: 'Sweet shops and halwai' },
-    { query: 'pickle manufacturers', description: 'Pickle and food processors' },
     { query: 'catering services', description: 'Catering and food services' },
     { query: 'dhaba', description: 'Highway dhabas and eateries' },
+    { query: 'restaurants', description: 'Restaurants and hotels (bulk buyers)' },
   ];
 }
 

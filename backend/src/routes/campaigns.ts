@@ -4,7 +4,7 @@ import { prisma } from '../config/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { AuthenticatedRequest, ApiResponse, CreateCampaignInput } from '../types/index.js';
-import { sendCampaignMessage } from '../services/whatsapp/client.js';
+import { sendCampaignMessage, whatsappClient } from '../services/whatsapp/client.js';
 
 const router = Router();
 
@@ -251,8 +251,29 @@ router.post('/:id/start', authenticate, async (req: AuthenticatedRequest, res: R
     throw new AppError('Campaign has already completed', 400);
   }
 
+  // Quality gate: refuse to start when Meta rates the number RED,
+  // force slow sending when YELLOW. Skipped silently if the API call fails.
+  const quality = await whatsappClient.getPhoneNumberQuality();
+  let forcedSpeed: string | null = null;
+  if (quality.qualityRating === 'RED') {
+    throw new AppError(
+      'WhatsApp number quality is RED — sending now risks a permanent block. Wait for quality to recover (check Meta Business Manager) before running campaigns.',
+      400
+    );
+  } else if (quality.qualityRating === 'YELLOW') {
+    forcedSpeed = 'slow';
+    console.log(`[Campaign ${campaign.id}] Quality is YELLOW — forcing slow sending speed`);
+  }
+
   // Get matching leads — either specific IDs or filter-based
   const targetFilters = campaign.targetFilters as any || {};
+
+  // Frequency cap: skip leads contacted recently (default 5 days, configurable per campaign)
+  const minDaysSinceContact = Number(targetFilters.minDaysSinceContact ?? 5);
+  const contactCutoff = new Date(Date.now() - minDaysSinceContact * 24 * 60 * 60 * 1000);
+  const frequencyCapWhere = minDaysSinceContact > 0
+    ? { OR: [{ lastContactedAt: null }, { lastContactedAt: { lt: contactCutoff } }] }
+    : {};
   let leads: { id: string }[];
 
   // Find leads who already received this template successfully (for dedup)
@@ -277,6 +298,7 @@ router.post('/:id/start', authenticate, async (req: AuthenticatedRequest, res: R
         id: { in: targetFilters.leadIds },
         optedOut: false,
         status: { notIn: ['DO_NOT_CONTACT', 'REJECTED'] },
+        ...frequencyCapWhere,
       },
       select: { id: true },
     });
@@ -285,6 +307,7 @@ router.post('/:id/start', authenticate, async (req: AuthenticatedRequest, res: R
     const leadWhere: any = {
       optedOut: false,
       status: { notIn: ['DO_NOT_CONTACT', 'REJECTED'] },
+      ...frequencyCapWhere,
     };
 
     if (targetFilters.status?.length) {
@@ -342,7 +365,7 @@ router.post('/:id/start', authenticate, async (req: AuthenticatedRequest, res: R
   // Send messages in the background (non-blocking)
   // Respond immediately, process sends asynchronously
   const headerMediaUrl = (campaign.targetFilters as any)?.headerMediaUrl;
-  const sendingSpeed = (campaign.targetFilters as any)?.sendingSpeed || 'normal';
+  const sendingSpeed = forcedSpeed || (campaign.targetFilters as any)?.sendingSpeed || 'normal';
   processCampaignMessages(campaign.id, campaign.templateId, leads.map(l => l.id), headerMediaUrl, sendingSpeed)
     .catch(err => console.error(`Campaign ${campaign.id} send error:`, err));
 
@@ -602,6 +625,24 @@ router.get('/:id/analytics', authenticate, async (req: AuthenticatedRequest, res
   });
 });
 
+// GET /api/campaigns/quality/status - WhatsApp number quality rating (GREEN/YELLOW/RED)
+router.get('/quality/status', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
+  const quality = await whatsappClient.getPhoneNumberQuality();
+  res.json({
+    success: true,
+    data: {
+      qualityRating: quality.qualityRating,
+      error: quality.error,
+      advice:
+        quality.qualityRating === 'RED'
+          ? 'Do NOT send campaigns. Wait for quality to recover.'
+          : quality.qualityRating === 'YELLOW'
+            ? 'At risk — campaigns will be forced to slow speed.'
+            : 'Healthy.',
+    },
+  });
+});
+
 // DELETE /api/campaigns/:id - Delete a campaign
 router.delete('/:id', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
   const campaign = await prisma.campaign.findUnique({
@@ -641,6 +682,28 @@ async function processCampaignMessages(
   const RATE_WINDOW = 20;        // rolling window size for success rate check
   const MIN_SUCCESS_RATE = 0.60; // auto-pause if success rate drops below 60%
 
+  // Error codes that mean Meta is flagging US — stop immediately, don't burn quality rating
+  const FATAL_ERROR_CODES = new Set([
+    131048, // Spam rate limit hit — business is being throttled for spam
+    368,    // Temporarily blocked for policy violations
+    130429, // Rate limit hit
+    131056, // (Business, consumer) pair rate limit — too many sends to same region/user
+  ]);
+
+  // Only send during business hours (IST). Messages outside this window feel
+  // like spam and get blocked/reported far more often.
+  const SEND_HOUR_START = 9;  // 9 AM IST
+  const SEND_HOUR_END = 21;   // 9 PM IST
+  const istHour = () => (new Date().getUTCHours() + 5.5) % 24;
+
+  // Global cap across ALL campaigns per calendar day (protects quality rating)
+  const GLOBAL_DAILY_CAP = parseInt(process.env.CAMPAIGN_GLOBAL_DAILY_CAP || '250', 10);
+  const startOfToday = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
   console.log(`[Campaign ${campaignId}] Starting to send ${leadIds.length} messages (speed: ${sendingSpeed}, delay: ${BASE_DELAY / 1000}s${DAILY_LIMIT ? `, daily limit: ${DAILY_LIMIT}` : ''})`);
   let sent = 0;
   let failed = 0;
@@ -668,6 +731,34 @@ async function processCampaignMessages(
       break;
     }
 
+    // Business hours check: pause outside 9 AM – 9 PM IST
+    const hour = istHour();
+    if (hour < SEND_HOUR_START || hour >= SEND_HOUR_END) {
+      console.log(`[Campaign ${campaignId}] Outside business hours (${hour.toFixed(1)} IST) — auto-pausing. Resume during 9 AM–9 PM.`);
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { status: 'PAUSED' },
+      });
+      break;
+    }
+
+    // Global daily cap across all campaigns
+    const sentToday = await prisma.messageLog.count({
+      where: {
+        direction: 'OUTBOUND',
+        channel: 'WHATSAPP',
+        sentAt: { gte: startOfToday() },
+      },
+    });
+    if (sentToday >= GLOBAL_DAILY_CAP) {
+      console.log(`[Campaign ${campaignId}] Global daily cap of ${GLOBAL_DAILY_CAP} messages reached — auto-pausing`);
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { status: 'PAUSED' },
+      });
+      break;
+    }
+
     try {
       const result = await sendCampaignMessage(leadId, campaignId, templateId, [], headerMediaUrl);
 
@@ -683,6 +774,17 @@ async function processCampaignMessages(
       } else {
         failed++;
         console.log(`[Campaign ${campaignId}] Failed for lead ${leadId}: [${result.errorCode}] ${result.error}`);
+
+        // Fatal error: Meta is throttling/blocking us. Stop NOW — every further
+        // send digs the hole deeper and risks losing the number.
+        if (result.errorCode && FATAL_ERROR_CODES.has(result.errorCode)) {
+          console.log(`[Campaign ${campaignId}] FATAL error ${result.errorCode} — auto-pausing immediately. Wait several hours (or a day) before resuming at a slower speed.`);
+          await prisma.campaign.update({
+            where: { id: campaignId },
+            data: { status: 'PAUSED', sentCount: sent, failedCount: failed },
+          });
+          break;
+        }
       }
 
       // Update rolling window and check success rate

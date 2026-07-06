@@ -273,10 +273,14 @@ export default function Leads() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 text-sm text-gray-600">
+                      <a
+                        href={`tel:+${lead.phone}`}
+                        className="flex items-center gap-1 text-sm text-primary-600 hover:underline"
+                        title="Call this lead"
+                      >
                         <Phone size={14} />
                         {lead.phone}
-                      </div>
+                      </a>
                       {lead.email && (
                         <div className="flex items-center gap-1 text-sm text-gray-500 mt-1">
                           <Mail size={14} />

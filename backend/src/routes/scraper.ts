@@ -12,6 +12,7 @@ import {
   getIndianCities,
   getDeepSearchCities,
 } from '../services/scrapers/googleMaps.js';
+import { sendPushNotification } from '../services/pushNotification.js';
 
 const router = Router();
 
@@ -107,6 +108,16 @@ router.post('/google-maps', authenticate, async (req: AuthenticatedRequest, res:
   // Run scraper
   const result = await scrapeGoogleMaps(query, location);
 
+  // Notify all devices about new leads
+  if (result.leadsAdded > 0) {
+    sendPushNotification({
+      title: 'New leads added',
+      body: `${result.leadsAdded} new "${query}" leads in ${location}.`,
+      url: '/leads',
+      tag: 'new-leads',
+    }).catch((err) => console.error('Push notification failed:', err));
+  }
+
   res.json({
     success: true,
     data: result,
@@ -123,6 +134,15 @@ router.post('/google-maps-deep', authenticate, async (req: AuthenticatedRequest,
   const { query, location } = scrapeSchema.parse(req.body);
 
   const result = await scrapeGoogleMapsDeep(query, location);
+
+  if (result.leadsAdded > 0) {
+    sendPushNotification({
+      title: 'New leads added',
+      body: `Deep search added ${result.leadsAdded} new "${query}" leads in ${location}.`,
+      url: '/leads',
+      tag: 'new-leads',
+    }).catch((err) => console.error('Push notification failed:', err));
+  }
 
   res.json({
     success: true,

@@ -5,6 +5,7 @@ import multer from 'multer';
 import { prisma } from '../config/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { sendPushNotification } from '../services/pushNotification.js';
 import {
   AuthenticatedRequest,
   ApiResponse,
@@ -100,12 +101,19 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res: Response<Ap
     where.createdAt = { gte: createdAfter };
   }
 
+  // Sorting: ?sortBy=relevance puts best mustard oil prospects first
+  const sortBy = req.query.sortBy as string | undefined;
+  const orderBy: any =
+    sortBy === 'relevance'
+      ? [{ relevanceScore: 'desc' }, { createdAt: 'desc' }]
+      : { createdAt: 'desc' };
+
   const [leads, total] = await Promise.all([
     prisma.lead.findMany({
       where,
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy,
     }),
     prisma.lead.count({ where }),
   ]);
@@ -337,6 +345,15 @@ router.post(
           error: error instanceof Error ? error.message : 'Unknown error',
         });
       }
+    }
+
+    if (result.imported > 0) {
+      sendPushNotification({
+        title: 'New leads imported',
+        body: `${result.imported} new leads added from CSV import.`,
+        url: '/leads',
+        tag: 'new-leads',
+      }).catch((err) => console.error('Push notification failed:', err));
     }
 
     res.json({

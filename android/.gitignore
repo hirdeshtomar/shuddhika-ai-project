@@ -1,0 +1,7 @@
+# Never commit signing secrets
+shuddhika-release.keystore
+keystore-passwords.txt
+gradle.properties
+.gradle/
+build/
+local.properties

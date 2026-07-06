@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
+import { prisma } from '../config/database.js';
 import { AuthenticatedRequest, ApiResponse } from '../types/index.js';
 
 interface JwtPayload {
@@ -9,11 +10,49 @@ interface JwtPayload {
   role: string;
 }
 
+// ============================================================
+// AUTH DISABLED (temporary): every request acts as the owner.
+// To restore login: set to false, redeploy backend, and restore
+// the login flow in frontend/src/App.tsx (see AUTH DISABLED there).
+// ============================================================
+export const AUTH_DISABLED = true;
+
+const SYSTEM_USER_EMAIL = 'owner@shuddhika.local';
+let systemUserId: string | null = null;
+
+/** Get (or create once) the user record all requests run as while auth is off. */
+async function getSystemUserId(): Promise<string> {
+  if (systemUserId) return systemUserId;
+  const user = await prisma.user.upsert({
+    where: { email: SYSTEM_USER_EMAIL },
+    update: {},
+    create: {
+      email: SYSTEM_USER_EMAIL,
+      // Not a valid bcrypt hash — this account can never log in via password
+      password: 'LOGIN_DISABLED',
+      name: 'Shuddhika Owner',
+      role: 'ADMIN',
+    },
+  });
+  systemUserId = user.id;
+  return user.id;
+}
+
 export function authenticate(
   req: AuthenticatedRequest,
   res: Response<ApiResponse>,
   next: NextFunction
 ): void {
+  if (AUTH_DISABLED) {
+    getSystemUserId()
+      .then((id) => {
+        req.user = { id, email: SYSTEM_USER_EMAIL, role: 'ADMIN' };
+        next();
+      })
+      .catch(next);
+    return;
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {

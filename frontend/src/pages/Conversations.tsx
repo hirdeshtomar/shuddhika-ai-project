@@ -357,6 +357,15 @@ export default function Conversations() {
                   {lead?.city && ` · ${lead.city}`}
                 </p>
               </div>
+              {lead?.phone && (
+                <a
+                  href={`tel:+${lead.phone}`}
+                  className="p-2 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-full transition-colors"
+                  title={`Call ${lead?.name || 'lead'}`}
+                >
+                  <Phone size={18} />
+                </a>
+              )}
               <button
                 onClick={() => setDeleteTarget({ leadId: selectedLeadId!, name: lead?.name || 'this contact' })}
                 className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"

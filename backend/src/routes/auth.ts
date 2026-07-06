@@ -22,6 +22,13 @@ const loginSchema = z.object({
 
 // POST /api/auth/register - Register new user
 router.post('/register', async (req: Request, res: Response<ApiResponse>) => {
+  // While auth is disabled, account creation is blocked (the endpoint would
+  // otherwise let anyone create accounts for later, when login returns).
+  const { AUTH_DISABLED } = await import('../middleware/auth.js');
+  if (AUTH_DISABLED) {
+    throw new AppError('Registration is disabled while login is turned off', 403);
+  }
+
   const { email, password, name } = registerSchema.parse(req.body);
 
   // Check if user already exists
