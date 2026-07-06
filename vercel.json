@@ -16,6 +16,7 @@
     { "source": "/((?!api/|assets/|.*\\..*).*)", "destination": "/index.html" }
   ],
   "crons": [
-    { "path": "/api/cron/campaign-tick", "schedule": "* * * * *" }
+    { "path": "/api/cron/campaign-tick", "schedule": "* * * * *" },
+    { "path": "/api/cron/daily-outreach", "schedule": "30 4 * * *" }
   ]
 }

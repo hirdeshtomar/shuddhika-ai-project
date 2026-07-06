@@ -1,0 +1,105 @@
+import axios from 'axios';
+import { prisma } from '../config/database.js';
+
+/**
+ * AiSensy integration.
+ *
+ * A single AiSensy API call both creates the contact and sends the WhatsApp
+ * template — so "add lead + send outreach" is one request. Replies land in
+ * AiSensy's team inbox AND (via Coexistence) the WhatsApp Business app on the
+ * phone, so staff get notifications and a native chat experience.
+ *
+ * Docs: https://wiki.aisensy.com/en/articles/11501889-api-reference-docs
+ */
+
+const AISENSY_API_URL =
+  process.env.AISENSY_API_URL || 'https://backend.aisensy.com/campaign/t1/api/v2';
+
+export function isAiSensyConfigured(): boolean {
+  return !!(process.env.AISENSY_API_KEY && process.env.AISENSY_CAMPAIGN_NAME);
+}
+
+/** Normalise an Indian phone to AiSensy's expected "91XXXXXXXXXX" (no +). */
+function toAiSensyDestination(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 10) return `91${digits}`;
+  return digits; // already includes country code
+}
+
+export interface AiSensySendResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Send the outreach template to one lead via AiSensy.
+ * templateParams map to {{1}}, {{2}}, ... in the approved AiSensy campaign template.
+ * We pass name + business name by default (matches our other templates).
+ */
+export async function sendLeadViaAiSensy(lead: {
+  id: string;
+  name: string;
+  phone: string;
+  businessName?: string | null;
+  city?: string | null;
+}): Promise<AiSensySendResult> {
+  if (!isAiSensyConfigured()) {
+    return { success: false, error: 'AiSensy not configured' };
+  }
+
+  const payload = {
+    apiKey: process.env.AISENSY_API_KEY,
+    campaignName: process.env.AISENSY_CAMPAIGN_NAME,
+    destination: toAiSensyDestination(lead.phone),
+    userName: lead.name || lead.businessName || 'there',
+    source: 'shuddhika-scraper',
+    templateParams: [
+      lead.name || lead.businessName || 'there',
+      lead.businessName || lead.name || 'your business',
+    ],
+    tags: ['mustard-oil-lead'],
+    attributes: {
+      business_name: lead.businessName || '',
+      city: lead.city || '',
+    },
+  };
+
+  // Log the outbound attempt (mirrors our MessageLog for reporting/dedup)
+  const messageLog = await prisma.messageLog.create({
+    data: {
+      leadId: lead.id,
+      channel: 'WHATSAPP',
+      direction: 'OUTBOUND',
+      content: `AiSensy campaign: ${process.env.AISENSY_CAMPAIGN_NAME}`,
+      status: 'PENDING',
+    },
+  });
+
+  try {
+    await axios.post(AISENSY_API_URL, payload, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 15000,
+    });
+
+    await prisma.messageLog.update({
+      where: { id: messageLog.id },
+      data: { status: 'SENT', sentAt: new Date() },
+    });
+
+    await prisma.lead.update({
+      where: { id: lead.id },
+      data: { status: 'CONTACTED', lastContactedAt: new Date() },
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    const errMsg = error.response?.data?.errorMessage
+      || error.response?.data?.message
+      || error.message;
+    await prisma.messageLog.update({
+      where: { id: messageLog.id },
+      data: { status: 'FAILED', failedAt: new Date(), errorMessage: String(errMsg).slice(0, 500) },
+    });
+    return { success: false, error: errMsg };
+  }
+}
