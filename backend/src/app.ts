@@ -16,6 +16,7 @@ import conversationRoutes from './routes/conversations.js';
 import pushRoutes from './routes/push.js';
 import autoReplyRoutes from './routes/autoReplies.js';
 import cronRoutes from './routes/cron.js';
+import aisensyRoutes from './routes/aisensy.js';
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.use('/api/conversations', conversationRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/auto-replies', autoReplyRoutes);
 app.use('/api/cron', cronRoutes);
+app.use('/api/aisensy', aisensyRoutes);
 
 // Dashboard stats endpoint
 app.get('/api/dashboard', async (req, res) => {
