@@ -47,7 +47,7 @@ export async function sendLeadViaAiSensy(lead: {
     return { success: false, error: 'AiSensy not configured' };
   }
 
-  const payload = {
+  const payload: Record<string, any> = {
     apiKey: process.env.AISENSY_API_KEY,
     campaignName: process.env.AISENSY_CAMPAIGN_NAME,
     destination: toAiSensyDestination(lead.phone),
@@ -62,6 +62,16 @@ export async function sendLeadViaAiSensy(lead: {
       city: lead.city || '',
     },
   };
+
+  // Header video: pass the real media URL on every send (overrides the template's
+  // approval-sample video). Set AISENSY_MEDIA_URL to a public direct URL —
+  // a Supabase public-bucket link works best for WhatsApp streaming.
+  if (process.env.AISENSY_MEDIA_URL) {
+    payload.media = {
+      url: process.env.AISENSY_MEDIA_URL,
+      filename: process.env.AISENSY_MEDIA_FILENAME || 'shuddhika-mustard-oil.mp4',
+    };
+  }
 
   // Log the outbound attempt (mirrors our MessageLog for reporting/dedup)
   const messageLog = await prisma.messageLog.create({
