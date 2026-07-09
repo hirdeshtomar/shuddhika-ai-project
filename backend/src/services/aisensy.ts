@@ -53,10 +53,9 @@ export async function sendLeadViaAiSensy(lead: {
     destination: toAiSensyDestination(lead.phone),
     userName: lead.name || lead.businessName || 'there',
     source: 'shuddhika-scraper',
-    templateParams: [
-      lead.name || lead.businessName || 'there',
-      lead.businessName || lead.name || 'your business',
-    ],
+    // Single {{1}} = the shop/contact name. (Scraped leads store the shop name
+    // in both fields, so one variable avoids awkward repetition.)
+    templateParams: [lead.name || lead.businessName || 'there'],
     tags: ['mustard-oil-lead'],
     attributes: {
       business_name: lead.businessName || '',
