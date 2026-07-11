@@ -47,15 +47,31 @@ export async function sendLeadViaAiSensy(lead: {
     return { success: false, error: 'AiSensy not configured' };
   }
 
+  // Build templateParams to MATCH the approved AiSensy template's {{ }} variables.
+  // Controlled by AISENSY_TEMPLATE_PARAMS (comma-separated field names, in order):
+  //   ""  or "none"      -> no variables  (template has no {{1}})   e.g. "Hello, we manufacture..."
+  //   "name"             -> 1 variable {{1}} = shop/contact name    (default)
+  //   "name,business"    -> 2 variables {{1}} {{2}}
+  //   "name,business,city" -> 3 variables, etc.
+  const fieldMap: Record<string, string> = {
+    name: lead.name || lead.businessName || 'there',
+    business: lead.businessName || lead.name || 'your business',
+    businessname: lead.businessName || lead.name || 'your business',
+    city: lead.city || '',
+  };
+  const spec = (process.env.AISENSY_TEMPLATE_PARAMS ?? 'name').trim().toLowerCase();
+  const templateParams =
+    spec === '' || spec === 'none'
+      ? []
+      : spec.split(',').map((f) => fieldMap[f.trim()] ?? '');
+
   const payload: Record<string, any> = {
     apiKey: process.env.AISENSY_API_KEY,
     campaignName: process.env.AISENSY_CAMPAIGN_NAME,
     destination: toAiSensyDestination(lead.phone),
     userName: lead.name || lead.businessName || 'there',
     source: 'shuddhika-scraper',
-    // Single {{1}} = the shop/contact name. (Scraped leads store the shop name
-    // in both fields, so one variable avoids awkward repetition.)
-    templateParams: [lead.name || lead.businessName || 'there'],
+    templateParams,
     tags: ['mustard-oil-lead'],
     attributes: {
       business_name: lead.businessName || '',
