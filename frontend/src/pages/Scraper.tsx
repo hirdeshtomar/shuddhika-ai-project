@@ -252,7 +252,7 @@ export default function Scraper() {
           <button
             onClick={() => scrapeMutation.mutate()}
             disabled={!isConfigured || isSearching || !query || !location}
-            className="btn btn-primary flex items-center gap-2"
+            className="btn btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {scrapeMutation.isPending ? (
               <>
@@ -286,6 +286,22 @@ export default function Scraper() {
             )}
           </button>
         </div>
+
+        {/* Why is the button disabled? */}
+        {isConfigured && !isSearching && (!query || !location) && (
+          <p className="text-sm text-amber-600 mt-3">
+            {!query && !location
+              ? 'Enter a business type and a city to enable search.'
+              : !query
+                ? 'Enter a business type (e.g. "kirana store") to enable search.'
+                : 'Enter or pick a city to enable search.'}
+          </p>
+        )}
+        {isSearching && (
+          <p className="text-sm text-gray-500 mt-3">
+            Searching Google Maps… this can take 20–40 seconds. Please wait.
+          </p>
+        )}
 
         {scrapeMutation.isPending && (
           <p className="text-sm text-gray-500 mt-2">
