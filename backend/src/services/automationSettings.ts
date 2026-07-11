@@ -32,3 +32,10 @@ export function istDateString(d: Date = new Date()): string {
 export function istHour(d: Date = new Date()): number {
   return Math.floor((d.getTime() + 5.5 * 60 * 60 * 1000) / (60 * 60 * 1000)) % 24;
 }
+
+/** UTC Date instant corresponding to IST midnight of the current day. */
+export function istStartOfToday(d: Date = new Date()): Date {
+  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1000);
+  ist.setUTCHours(0, 0, 0, 0);
+  return new Date(ist.getTime() - 5.5 * 60 * 60 * 1000);
+}

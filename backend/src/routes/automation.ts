@@ -25,8 +25,10 @@ router.get('/', authenticate, async (_req: AuthenticatedRequest, res: Response<A
 // PUT /api/automation - update settings
 const updateSchema = z.object({
   enabled: z.boolean().optional(),
-  runHourIST: z.number().int().min(0).max(23).optional(),
-  dailyCap: z.number().int().min(1).max(250).optional(),
+  workStartHourIST: z.number().int().min(0).max(23).optional(),
+  workEndHourIST: z.number().int().min(1).max(24).optional(),
+  dailyCap: z.number().int().min(1).max(500).optional(),
+  maxPerBatch: z.number().int().min(1).max(100).optional(),
   minRelevanceScore: z.number().int().min(0).max(100).optional(),
   combosPerDay: z.number().int().min(1).max(8).optional(),
   messageProfileId: z.string().nullable().optional(),

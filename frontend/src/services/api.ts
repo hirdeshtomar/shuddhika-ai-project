@@ -159,7 +159,10 @@ export const leadsApi = {
 export interface AutomationSettings {
   enabled: boolean;
   runHourIST: number;
+  workStartHourIST: number;
+  workEndHourIST: number;
   dailyCap: number;
+  maxPerBatch: number;
   minRelevanceScore: number;
   combosPerDay: number;
   messageProfileId: string | null;
@@ -226,7 +229,7 @@ export const automationApi = {
     const { data } = await api.get<ApiResponse<OutreachRun[]>>('/automation/runs');
     return data;
   },
-  update: async (settings: Partial<Pick<AutomationSettings, 'enabled' | 'runHourIST' | 'dailyCap' | 'minRelevanceScore' | 'combosPerDay' | 'messageProfileId'>>) => {
+  update: async (settings: Partial<Pick<AutomationSettings, 'enabled' | 'workStartHourIST' | 'workEndHourIST' | 'dailyCap' | 'maxPerBatch' | 'minRelevanceScore' | 'combosPerDay' | 'messageProfileId'>>) => {
     const { data } = await api.put<ApiResponse<AutomationSettings>>('/automation', settings);
     return data;
   },

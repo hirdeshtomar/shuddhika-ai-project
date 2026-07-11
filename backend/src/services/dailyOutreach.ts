@@ -2,7 +2,7 @@ import { prisma } from '../config/database.js';
 import { scrapeGoogleMaps } from './scrapers/googleMaps.js';
 import { sendLeadViaAiSensy, isAiSensyConfigured, resolveSendProfile } from './aisensy.js';
 import { sendPushNotification } from './pushNotification.js';
-import { getAutomationSettings, istDateString, istHour } from './automationSettings.js';
+import { getAutomationSettings, istDateString, istHour, istStartOfToday } from './automationSettings.js';
 
 /**
  * Daily auto-outreach: runs once a day (Vercel Cron).
@@ -65,53 +65,72 @@ export async function runDailyOutreach(opts: { force?: boolean } = {}): Promise<
   }
 
   const settings = await getAutomationSettings();
-  const today = istDateString();
+  const relevanceMin = settings.minRelevanceScore;
 
+  const hour = istHour();
   if (!opts.force) {
     if (!settings.enabled) {
       result.skippedReason = 'Automation is turned off';
       return result;
     }
-    if (istHour() !== settings.runHourIST) {
-      result.skippedReason = `Not the scheduled hour (runs at ${settings.runHourIST}:00 IST)`;
-      return result;
-    }
-    if (settings.lastRunDate === today) {
-      result.skippedReason = 'Already ran today';
+    if (hour < settings.workStartHourIST || hour >= settings.workEndHourIST) {
+      result.skippedReason = `Outside working hours (${settings.workStartHourIST}:00–${settings.workEndHourIST}:00 IST)`;
       return result;
     }
   }
+
+  // How many automated messages have already gone out today?
+  const todaysRuns = await prisma.outreachRun.aggregate({
+    where: { type: 'AUTOMATED', startedAt: { gte: istStartOfToday() } },
+    _sum: { sent: true },
+  });
+  const sentToday = todaysRuns._sum.sent || 0;
+  const remaining = Math.max(0, settings.dailyCap - sentToday);
+
+  if (!opts.force && remaining <= 0) {
+    result.skippedReason = `Daily total of ${settings.dailyCap} already sent`;
+    return result;
+  }
+
+  // Spread the remaining messages evenly over the hours left in the window,
+  // so sending trickles through the day instead of bursting.
+  const hoursLeft = opts.force ? 1 : Math.max(1, settings.workEndHourIST - hour);
+  let batch = Math.ceil((opts.force ? settings.dailyCap : remaining) / hoursLeft);
+  batch = Math.min(batch, settings.maxPerBatch);
+  if (!opts.force) batch = Math.min(batch, remaining);
+  batch = Math.max(1, batch);
 
   result.ran = true;
   const d = dayIndex();
 
-  const combosPerDay = settings.combosPerDay;
-  const relevanceMin = settings.minRelevanceScore;
-  const dailyCap = settings.dailyCap;
-
-  // 1 + 2. Scrape today's rotating targets
-  for (let i = 0; i < combosPerDay; i++) {
-    const query = OUTREACH_QUERIES[(d + i) % OUTREACH_QUERIES.length]!;
-    const city = OUTREACH_CITIES[(d * combosPerDay + i) % OUTREACH_CITIES.length]!;
-    result.targets.push(`${query} in ${city}`);
-    try {
-      const scr = await scrapeGoogleMaps(query, city);
-      result.leadsScraped += scr.leadsAdded;
-    } catch (err: any) {
-      console.error(`[DailyOutreach] scrape failed for "${query} in ${city}":`, err.message);
+  // Top up the lead pool if we don't have enough qualifying, uncontacted leads
+  // for this batch. Only scrape when needed — keeps Google API cost down.
+  const qualifyingWhere = {
+    status: 'NEW' as const,
+    optedOut: false,
+    lastContactedAt: null,
+    relevanceScore: { gte: relevanceMin },
+  };
+  const available = await prisma.lead.count({ where: qualifyingWhere });
+  if (available < batch) {
+    for (let i = 0; i < settings.combosPerDay; i++) {
+      const query = OUTREACH_QUERIES[(d + i) % OUTREACH_QUERIES.length]!;
+      const city = OUTREACH_CITIES[(d * settings.combosPerDay + hour + i) % OUTREACH_CITIES.length]!;
+      result.targets.push(`${query} in ${city}`);
+      try {
+        const scr = await scrapeGoogleMaps(query, city);
+        result.leadsScraped += scr.leadsAdded;
+      } catch (err: any) {
+        console.error(`[Outreach] scrape failed for "${query} in ${city}":`, err.message);
+      }
     }
   }
 
-  // 3. Select the best new, uncontacted, high-relevance leads
+  // Select this batch's best new, uncontacted, high-relevance leads
   const candidates = await prisma.lead.findMany({
-    where: {
-      status: 'NEW',
-      optedOut: false,
-      lastContactedAt: null,
-      relevanceScore: { gte: relevanceMin },
-    },
+    where: qualifyingWhere,
     orderBy: [{ relevanceScore: 'desc' }, { createdAt: 'desc' }],
-    take: dailyCap,
+    take: batch,
   });
 
   const sendProfile = await resolveSendProfile(settings.messageProfileId);
@@ -146,7 +165,7 @@ export async function runDailyOutreach(opts: { force?: boolean } = {}): Promise<
     where: { id: settings.id },
     data: {
       lastRunAt: new Date(),
-      lastRunDate: today,
+      lastRunDate: istDateString(),
       lastRunTargets: result.targets,
       lastScraped: result.leadsScraped,
       lastSent: result.messagesSent,

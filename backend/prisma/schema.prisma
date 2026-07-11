@@ -353,10 +353,13 @@ model AutomationSettings {
   id                String   @id @default("default")
 
   enabled           Boolean  @default(false)
-  runHourIST        Int      @default(10)   // 0-23, hour of day (IST) to run
-  dailyCap          Int      @default(15)   // max messages sent per day
+  runHourIST        Int      @default(10)   // legacy (unused) — kept for compatibility
+  workStartHourIST  Int      @default(10)   // start of working window (IST)
+  workEndHourIST    Int      @default(18)   // end of working window (IST, exclusive)
+  dailyCap          Int      @default(60)   // total messages to send across the whole day
+  maxPerBatch       Int      @default(20)   // safety ceiling on any single hourly batch
   minRelevanceScore Int      @default(55)   // only message leads scoring >= this
-  combosPerDay      Int      @default(3)    // city+category combos scraped per day
+  combosPerDay      Int      @default(3)    // city+category combos scraped per top-up
   messageProfileId  String?                 // which MessageProfile automation sends
 
   // Last-run snapshot (for the dashboard)

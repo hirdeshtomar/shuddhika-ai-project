@@ -21,8 +21,10 @@ export default function Automation() {
   // Local editable form state
   const [form, setForm] = useState({
     enabled: false,
-    runHourIST: 10,
-    dailyCap: 15,
+    workStartHourIST: 10,
+    workEndHourIST: 18,
+    dailyCap: 60,
+    maxPerBatch: 20,
     minRelevanceScore: 55,
     combosPerDay: 3,
     messageProfileId: '' as string,
@@ -32,8 +34,10 @@ export default function Automation() {
     if (settings) {
       setForm({
         enabled: settings.enabled,
-        runHourIST: settings.runHourIST,
+        workStartHourIST: settings.workStartHourIST,
+        workEndHourIST: settings.workEndHourIST,
         dailyCap: settings.dailyCap,
+        maxPerBatch: settings.maxPerBatch,
         minRelevanceScore: settings.minRelevanceScore,
         combosPerDay: settings.combosPerDay,
         messageProfileId: settings.messageProfileId || '',
@@ -135,29 +139,54 @@ export default function Automation() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Run each day at</label>
-          <select
-            value={form.runHourIST}
-            onChange={(e) => setForm({ ...form, runHourIST: Number(e.target.value) })}
-            className="input w-48"
-          >
-            {Array.from({ length: 24 }, (_, h) => (
-              <option key={h} value={h}>{hourLabel(h)}</option>
-            ))}
-          </select>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Working hours (IST)</label>
+          <div className="flex items-center gap-2">
+            <select
+              value={form.workStartHourIST}
+              onChange={(e) => setForm({ ...form, workStartHourIST: Number(e.target.value) })}
+              className="input w-36"
+            >
+              {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
+            </select>
+            <span className="text-gray-400">to</span>
+            <select
+              value={form.workEndHourIST}
+              onChange={(e) => setForm({ ...form, workEndHourIST: Number(e.target.value) })}
+              className="input w-36"
+            >
+              {Array.from({ length: 24 }, (_, h) => <option key={h + 1} value={h + 1}>{hourLabel(h + 1)}</option>)}
+            </select>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">Messages are trickled out in small hourly batches across this window.</p>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Leads to contact per day: <span className="font-bold text-primary-600">{form.dailyCap}</span>
+            Total leads to contact per day: <span className="font-bold text-primary-600">{form.dailyCap}</span>
           </label>
           <input
-            type="range" min={5} max={100} step={5}
+            type="range" min={10} max={300} step={10}
             value={form.dailyCap}
             onChange={(e) => setForm({ ...form, dailyCap: Number(e.target.value) })}
             className="w-full"
           />
-          <p className="text-xs text-gray-500 mt-1">Start low (15–20) while your WhatsApp number builds quality.</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Spread evenly across your working hours (~{Math.max(1, Math.ceil(form.dailyCap / Math.max(1, form.workEndHourIST - form.workStartHourIST)))}/hour).
+            Ramp up over days — start ~40–60 while your number builds quality.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Max per hourly batch: <span className="font-bold text-primary-600">{form.maxPerBatch}</span>
+          </label>
+          <input
+            type="range" min={5} max={50} step={5}
+            value={form.maxPerBatch}
+            onChange={(e) => setForm({ ...form, maxPerBatch: Number(e.target.value) })}
+            className="w-full"
+          />
+          <p className="text-xs text-gray-500 mt-1">Safety ceiling so no single hour sends a big burst.</p>
         </div>
 
         <div>
