@@ -145,6 +145,15 @@ export const leadsApi = {
     const { data } = await api.post<ApiResponse<{ updated: number }>>('/leads/backfill-contacted');
     return data;
   },
+
+  // Send the approved WhatsApp template to selected leads via AiSensy
+  sendWhatsApp: async (leadIds: string[]) => {
+    const { data } = await api.post<ApiResponse<{ sent: number; failed: number; skipped: number; errors: string[] }>>(
+      '/aisensy/send-leads',
+      { leadIds }
+    );
+    return data;
+  },
 };
 
 // Campaigns

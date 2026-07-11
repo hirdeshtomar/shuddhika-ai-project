@@ -2,11 +2,7 @@ import { Outlet, NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
-  Megaphone,
-  FileText,
   Search,
-  MessageSquare,
-  MessageSquareReply,
   Menu,
   X,
   Bell,
@@ -19,10 +15,6 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Find Leads', href: '/scraper', icon: Search },
   { name: 'Leads', href: '/leads', icon: Users },
-  { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
-  { name: 'Conversations', href: '/conversations', icon: MessageSquare },
-  { name: 'Templates', href: '/templates', icon: FileText },
-  { name: 'Auto-Replies', href: '/auto-replies', icon: MessageSquareReply },
 ];
 
 function useNotifications() {

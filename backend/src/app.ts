@@ -8,15 +8,12 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 // Route imports
 import authRoutes from './routes/auth.js';
 import leadRoutes from './routes/leads.js';
-import campaignRoutes from './routes/campaigns.js';
-import templateRoutes from './routes/templates.js';
-import webhookRoutes from './routes/webhook.js';
 import scraperRoutes from './routes/scraper.js';
-import conversationRoutes from './routes/conversations.js';
 import pushRoutes from './routes/push.js';
-import autoReplyRoutes from './routes/autoReplies.js';
 import cronRoutes from './routes/cron.js';
 import aisensyRoutes from './routes/aisensy.js';
+// Retired (WhatsApp now handled by AiSensy): campaigns, templates, webhook,
+// conversations, autoReplies. Files kept in repo but no longer mounted.
 
 const app = express();
 
@@ -50,13 +47,8 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/leads', leadRoutes);
-app.use('/api/campaigns', campaignRoutes);
-app.use('/api/templates', templateRoutes);
-app.use('/api/webhook', webhookRoutes);
 app.use('/api/scraper', scraperRoutes);
-app.use('/api/conversations', conversationRoutes);
 app.use('/api/push', pushRoutes);
-app.use('/api/auto-replies', autoReplyRoutes);
 app.use('/api/cron', cronRoutes);
 app.use('/api/aisensy', aisensyRoutes);
 

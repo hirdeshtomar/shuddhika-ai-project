@@ -13,6 +13,7 @@ import {
   X,
   UserX,
   RefreshCw,
+  Send,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { leadsApi } from '../services/api';
@@ -66,6 +67,17 @@ export default function Leads() {
       toast.success(data.message || 'Cleanup complete');
     },
     onError: () => toast.error('Failed to clean up leads'),
+  });
+
+  const sendWhatsAppMutation = useMutation({
+    mutationFn: leadsApi.sendWhatsApp,
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      setSelectedLeads([]);
+      toast.success(res.message || 'Sent via WhatsApp');
+    },
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.error || 'Failed to send WhatsApp messages'),
   });
 
   const backfillMutation = useMutation({
@@ -193,13 +205,27 @@ export default function Leads() {
           <span className="text-sm text-primary-700">
             {selectedLeads.length} lead(s) selected
           </span>
-          <button
-            onClick={() => bulkDeleteMutation.mutate(selectedLeads)}
-            className="btn btn-danger text-sm py-1"
-          >
-            <Trash2 size={16} className="mr-1" />
-            Delete Selected
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (confirm(`Send the WhatsApp template to ${selectedLeads.length} lead(s) via AiSensy?`)) {
+                  sendWhatsAppMutation.mutate(selectedLeads);
+                }
+              }}
+              disabled={sendWhatsAppMutation.isPending}
+              className="btn btn-primary text-sm py-1"
+            >
+              <Send size={16} className="mr-1" />
+              {sendWhatsAppMutation.isPending ? 'Sending…' : 'Send WhatsApp'}
+            </button>
+            <button
+              onClick={() => bulkDeleteMutation.mutate(selectedLeads)}
+              className="btn btn-danger text-sm py-1"
+            >
+              <Trash2 size={16} className="mr-1" />
+              Delete Selected
+            </button>
+          </div>
         </div>
       )}
 

@@ -4,12 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
-import Campaigns from './pages/Campaigns';
-import Templates from './pages/Templates';
 import Scraper from './pages/Scraper';
-import CampaignDetail from './pages/CampaignDetail';
-import Conversations from './pages/Conversations';
-import AutoReplies from './pages/AutoReplies';
 // ============================================================
 // AUTH DISABLED (temporary): login is bypassed. To restore:
 // re-add PrivateRoute around <Layout /> and the /login route
@@ -34,12 +29,9 @@ function AppRoutes() {
       <Route path="/" element={<Layout />}>
         <Route index element={<Dashboard />} />
         <Route path="leads" element={<Leads />} />
-        <Route path="campaigns" element={<Campaigns />} />
-        <Route path="campaigns/:id" element={<CampaignDetail />} />
-        <Route path="conversations" element={<Conversations />} />
-        <Route path="templates" element={<Templates />} />
-        <Route path="auto-replies" element={<AutoReplies />} />
         <Route path="scraper" element={<Scraper />} />
+        {/* Retired (moved to AiSensy): campaigns, conversations, templates, auto-replies */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   );

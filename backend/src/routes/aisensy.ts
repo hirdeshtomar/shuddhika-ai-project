@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { sendLeadViaAiSensy, isAiSensyConfigured } from '../services/aisensy.js';
-import { ApiResponse } from '../types/index.js';
+import { ApiResponse, AuthenticatedRequest } from '../types/index.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { authenticate } from '../middleware/auth.js';
+import { prisma } from '../config/database.js';
 
 const router = Router();
 
@@ -63,6 +65,48 @@ router.post('/test', async (req: Request, res: Response<ApiResponse>) => {
       ? 'Sent via AiSensy — check the recipient WhatsApp and AiSensy inbox.'
       : `Failed: ${result.error}`,
     data: result,
+  });
+});
+
+/**
+ * POST /api/aisensy/send-leads - manual send to selected leads.
+ * Body: { leadIds: string[] }. Skips opted-out / do-not-contact leads.
+ */
+const sendLeadsSchema = z.object({
+  leadIds: z.array(z.string()).min(1, 'Select at least one lead'),
+});
+
+router.post('/send-leads', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {
+  if (!isAiSensyConfigured()) {
+    throw new AppError('AiSensy not configured (set AISENSY_API_KEY and AISENSY_CAMPAIGN_NAME)', 400);
+  }
+  const { leadIds } = sendLeadsSchema.parse(req.body);
+
+  const leads = await prisma.lead.findMany({
+    where: {
+      id: { in: leadIds },
+      optedOut: false,
+      status: { notIn: ['DO_NOT_CONTACT', 'REJECTED'] },
+    },
+  });
+
+  let sent = 0;
+  let failed = 0;
+  const errors: string[] = [];
+  for (const lead of leads) {
+    const r = await sendLeadViaAiSensy(lead);
+    if (r.success) sent++;
+    else {
+      failed++;
+      if (r.error && errors.length < 5) errors.push(`${lead.name}: ${r.error}`);
+    }
+    await new Promise((res) => setTimeout(res, 1200)); // gentle spacing
+  }
+
+  res.json({
+    success: true,
+    message: `Sent ${sent} via WhatsApp. ${failed} failed. ${leads.length < leadIds.length ? `${leadIds.length - leads.length} skipped (opted out / do-not-contact).` : ''}`,
+    data: { sent, failed, skipped: leadIds.length - leads.length, errors },
   });
 });
 
