@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Users,
   Search,
+  Zap,
   Menu,
   X,
   Bell,
@@ -15,6 +16,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Find Leads', href: '/scraper', icon: Search },
   { name: 'Leads', href: '/leads', icon: Users },
+  { name: 'Automation', href: '/automation', icon: Zap },
 ];
 
 function useNotifications() {

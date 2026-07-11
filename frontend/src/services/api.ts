@@ -156,6 +156,38 @@ export const leadsApi = {
   },
 };
 
+export interface AutomationSettings {
+  enabled: boolean;
+  runHourIST: number;
+  dailyCap: number;
+  minRelevanceScore: number;
+  combosPerDay: number;
+  lastRunAt: string | null;
+  lastRunDate: string | null;
+  lastRunTargets: string[];
+  lastScraped: number;
+  lastSent: number;
+  lastFailed: number;
+  lastRunNote: string | null;
+  aisensyConfigured: boolean;
+  campaignName: string | null;
+}
+
+export const automationApi = {
+  get: async () => {
+    const { data } = await api.get<ApiResponse<AutomationSettings>>('/automation');
+    return data;
+  },
+  update: async (settings: Partial<Pick<AutomationSettings, 'enabled' | 'runHourIST' | 'dailyCap' | 'minRelevanceScore' | 'combosPerDay'>>) => {
+    const { data } = await api.put<ApiResponse<AutomationSettings>>('/automation', settings);
+    return data;
+  },
+  runNow: async () => {
+    const { data } = await api.post<ApiResponse<{ ran: boolean; skippedReason?: string; targets: string[]; leadsScraped: number; messagesSent: number; messagesFailed: number }>>('/automation/run-now');
+    return data;
+  },
+};
+
 // Campaigns
 export const campaignsApi = {
   list: async (params?: { page?: number; limit?: number; status?: string }) => {

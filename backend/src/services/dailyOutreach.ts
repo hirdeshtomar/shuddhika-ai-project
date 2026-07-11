@@ -2,6 +2,7 @@ import { prisma } from '../config/database.js';
 import { scrapeGoogleMaps } from './scrapers/googleMaps.js';
 import { sendLeadViaAiSensy, isAiSensyConfigured } from './aisensy.js';
 import { sendPushNotification } from './pushNotification.js';
+import { getAutomationSettings, istDateString, istHour } from './automationSettings.js';
 
 /**
  * Daily auto-outreach: runs once a day (Vercel Cron).
@@ -49,7 +50,11 @@ export interface DailyOutreachResult {
   messagesFailed: number;
 }
 
-export async function runDailyOutreach(): Promise<DailyOutreachResult> {
+/**
+ * @param opts.force  Run now, ignoring the enabled flag / scheduled hour / once-a-day gate
+ *                    (used by the "Run now" button). Still needs AiSensy configured.
+ */
+export async function runDailyOutreach(opts: { force?: boolean } = {}): Promise<DailyOutreachResult> {
   const result: DailyOutreachResult = {
     ran: false, targets: [], leadsScraped: 0, messagesSent: 0, messagesFailed: 0,
   };
@@ -58,18 +63,31 @@ export async function runDailyOutreach(): Promise<DailyOutreachResult> {
     result.skippedReason = 'AiSensy not configured (set AISENSY_API_KEY and AISENSY_CAMPAIGN_NAME)';
     return result;
   }
-  if (process.env.DAILY_OUTREACH_ENABLED !== 'true') {
-    result.skippedReason = 'Daily outreach disabled (set DAILY_OUTREACH_ENABLED=true)';
-    return result;
+
+  const settings = await getAutomationSettings();
+  const today = istDateString();
+
+  if (!opts.force) {
+    if (!settings.enabled) {
+      result.skippedReason = 'Automation is turned off';
+      return result;
+    }
+    if (istHour() !== settings.runHourIST) {
+      result.skippedReason = `Not the scheduled hour (runs at ${settings.runHourIST}:00 IST)`;
+      return result;
+    }
+    if (settings.lastRunDate === today) {
+      result.skippedReason = 'Already ran today';
+      return result;
+    }
   }
 
   result.ran = true;
   const d = dayIndex();
 
-  // Rotate: pick a few query/city combos that shift each day.
-  const combosPerDay = parseInt(process.env.DAILY_OUTREACH_COMBOS || '3', 10);
-  const relevanceMin = parseInt(process.env.DAILY_OUTREACH_MIN_RELEVANCE || '55', 10);
-  const dailyCap = parseInt(process.env.DAILY_OUTREACH_CAP || '40', 10);
+  const combosPerDay = settings.combosPerDay;
+  const relevanceMin = settings.minRelevanceScore;
+  const dailyCap = settings.dailyCap;
 
   // 1 + 2. Scrape today's rotating targets
   for (let i = 0; i < combosPerDay; i++) {
@@ -103,6 +121,20 @@ export async function runDailyOutreach(): Promise<DailyOutreachResult> {
     // Gentle spacing between sends
     await new Promise((res) => setTimeout(res, 1500));
   }
+
+  // Record last-run snapshot + mark today done (so it won't repeat this calendar day)
+  await prisma.automationSettings.update({
+    where: { id: settings.id },
+    data: {
+      lastRunAt: new Date(),
+      lastRunDate: today,
+      lastRunTargets: result.targets,
+      lastScraped: result.leadsScraped,
+      lastSent: result.messagesSent,
+      lastFailed: result.messagesFailed,
+      lastRunNote: opts.force ? 'Manual run' : 'Scheduled run',
+    },
+  }).catch((e: any) => console.error('[DailyOutreach] failed to save last-run:', e.message));
 
   // Notify the team
   if (result.messagesSent > 0 || result.leadsScraped > 0) {

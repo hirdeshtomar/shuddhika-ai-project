@@ -61,6 +61,22 @@ Vercel → project → Settings → Environment Variables (Production):
 
 Redeploy after saving.
 
+## Part 5b — Control it from the app (no redeploys)
+
+Open the **Automation** page in the app. Everything is editable there and saved to
+the database — no Vercel redeploy needed:
+- Turn automation on/off
+- Pick the hour it runs (IST)
+- Leads to contact per day (cap)
+- Minimum relevance score
+- How many city+category searches per day
+- **Run Now** button to trigger immediately and test
+- A "Last Run" panel showing what happened (found / sent / failed + which places)
+
+The `DAILY_OUTREACH_*` env vars now only seed the initial defaults the first time;
+after that the Automation page is the source of truth. `AISENSY_API_KEY` and
+`AISENSY_CAMPAIGN_NAME` stay in env (they're secrets).
+
 ## Part 6 — How the daily run works
 
 - Every day at **10 AM IST** Vercel calls `/api/cron/daily-outreach`.

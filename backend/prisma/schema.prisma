@@ -312,6 +312,30 @@ enum JobStatus {
   FAILED
 }
 
+// Daily auto-outreach configuration (single row, id = "default")
+model AutomationSettings {
+  id                String   @id @default("default")
+
+  enabled           Boolean  @default(false)
+  runHourIST        Int      @default(10)   // 0-23, hour of day (IST) to run
+  dailyCap          Int      @default(15)   // max messages sent per day
+  minRelevanceScore Int      @default(55)   // only message leads scoring >= this
+  combosPerDay      Int      @default(3)    // city+category combos scraped per day
+
+  // Last-run snapshot (for the dashboard)
+  lastRunAt         DateTime?
+  lastRunDate       String?              // "YYYY-MM-DD" in IST — once-per-day gate
+  lastRunTargets    String[] @default([])
+  lastScraped       Int      @default(0)
+  lastSent          Int      @default(0)
+  lastFailed        Int      @default(0)
+  lastRunNote       String?
+
+  updatedAt         DateTime @updatedAt
+
+  @@map("automation_settings")
+}
+
 // Auto-reply rules for incoming WhatsApp messages
 model AutoReply {
   id              String   @id @default(cuid())

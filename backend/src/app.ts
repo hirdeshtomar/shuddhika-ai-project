@@ -12,6 +12,7 @@ import scraperRoutes from './routes/scraper.js';
 import pushRoutes from './routes/push.js';
 import cronRoutes from './routes/cron.js';
 import aisensyRoutes from './routes/aisensy.js';
+import automationRoutes from './routes/automation.js';
 // Retired (WhatsApp now handled by AiSensy): campaigns, templates, webhook,
 // conversations, autoReplies. Files kept in repo but no longer mounted.
 
@@ -51,6 +52,7 @@ app.use('/api/scraper', scraperRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/cron', cronRoutes);
 app.use('/api/aisensy', aisensyRoutes);
+app.use('/api/automation', automationRoutes);
 
 // Dashboard stats endpoint
 app.get('/api/dashboard', async (req, res) => {
