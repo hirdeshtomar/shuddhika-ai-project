@@ -85,14 +85,35 @@ export async function sendLeadViaAiSensy(lead: {
   });
 
   try {
-    await axios.post(AISENSY_API_URL, payload, {
+    const resp = await axios.post(AISENSY_API_URL, payload, {
       headers: { 'Content-Type': 'application/json' },
       timeout: 15000,
     });
 
+    // AiSensy returns HTTP 200 even when it REJECTS the send — the real outcome
+    // is in the body. Only count as sent when the body doesn't signal a failure.
+    const body = resp.data ?? {};
+    const bodyError =
+      body.success === false
+        ? (body.errorMessage || body.error || body.message || 'AiSensy rejected the message')
+        : (body.error || body.errorMessage || null);
+
+    if (bodyError) {
+      await prisma.messageLog.update({
+        where: { id: messageLog.id },
+        data: { status: 'FAILED', failedAt: new Date(), errorMessage: String(bodyError).slice(0, 500) },
+      });
+      return { success: false, error: String(bodyError) };
+    }
+
     await prisma.messageLog.update({
       where: { id: messageLog.id },
-      data: { status: 'SENT', sentAt: new Date() },
+      data: {
+        status: 'SENT',
+        sentAt: new Date(),
+        // Keep AiSensy's raw acceptance response for debugging
+        content: `AiSensy: ${JSON.stringify(body).slice(0, 400)}`,
+      },
     });
 
     await prisma.lead.update({
@@ -103,6 +124,7 @@ export async function sendLeadViaAiSensy(lead: {
     return { success: true };
   } catch (error: any) {
     const errMsg = error.response?.data?.errorMessage
+      || error.response?.data?.error
       || error.response?.data?.message
       || error.message;
     await prisma.messageLog.update({
