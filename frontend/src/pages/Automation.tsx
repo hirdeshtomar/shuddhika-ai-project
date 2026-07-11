@@ -25,9 +25,11 @@ export default function Automation() {
     workEndHourIST: 18,
     dailyCap: 60,
     maxPerBatch: 20,
-    minRelevanceScore: 55,
+    minRelevanceScore: 65,
     combosPerDay: 3,
     messageProfileId: '' as string,
+    targetQueriesText: '',
+    targetCitiesText: '',
   });
 
   useEffect(() => {
@@ -41,9 +43,27 @@ export default function Automation() {
         minRelevanceScore: settings.minRelevanceScore,
         combosPerDay: settings.combosPerDay,
         messageProfileId: settings.messageProfileId || '',
+        targetQueriesText: (settings.targetQueries || []).join('\n'),
+        targetCitiesText: (settings.targetCities || []).join('\n'),
       });
     }
   }, [settings]);
+
+  const parseList = (t: string) =>
+    t.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+
+  const buildPayload = () => ({
+    enabled: form.enabled,
+    workStartHourIST: form.workStartHourIST,
+    workEndHourIST: form.workEndHourIST,
+    dailyCap: form.dailyCap,
+    maxPerBatch: form.maxPerBatch,
+    minRelevanceScore: form.minRelevanceScore,
+    combosPerDay: form.combosPerDay,
+    messageProfileId: form.messageProfileId || null,
+    targetQueries: parseList(form.targetQueriesText),
+    targetCities: parseList(form.targetCitiesText),
+  });
 
   const saveMutation = useMutation({
     mutationFn: automationApi.update,
@@ -215,9 +235,40 @@ export default function Automation() {
           <p className="text-xs text-gray-500 mt-1">How many different places to scrape each day (they rotate).</p>
         </div>
 
+        <div className="border-t border-gray-100 pt-4">
+          <p className="font-medium text-gray-900 mb-1">Who to target (premium buyers)</p>
+          <p className="text-xs text-gray-500 mb-3">
+            One per line. Leave blank to use the built-in premium defaults (organic / gourmet /
+            specialty stores, quality-focused makers, in metros). Scoring already favours
+            organic, cold-pressed, gourmet, high-rating and higher-priced businesses.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Categories to search</label>
+              <textarea
+                rows={7}
+                value={form.targetQueriesText}
+                onChange={(e) => setForm({ ...form, targetQueriesText: e.target.value })}
+                placeholder={'organic food store\nhealth food store\ngourmet food store\ncold pressed oil store\npickle manufacturer'}
+                className="input font-mono text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cities to search</label>
+              <textarea
+                rows={7}
+                value={form.targetCitiesText}
+                onChange={(e) => setForm({ ...form, targetCitiesText: e.target.value })}
+                placeholder={'Delhi\nGurugram\nMumbai\nPune\nBangalore\nHyderabad'}
+                className="input font-mono text-sm"
+              />
+            </div>
+          </div>
+        </div>
+
         <div className="flex items-center gap-3 pt-2">
           <button
-            onClick={() => saveMutation.mutate(form)}
+            onClick={() => saveMutation.mutate(buildPayload())}
             disabled={saveMutation.isPending}
             className="btn btn-primary"
           >

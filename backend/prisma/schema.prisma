@@ -358,9 +358,11 @@ model AutomationSettings {
   workEndHourIST    Int      @default(18)   // end of working window (IST, exclusive)
   dailyCap          Int      @default(60)   // total messages to send across the whole day
   maxPerBatch       Int      @default(20)   // safety ceiling on any single hourly batch
-  minRelevanceScore Int      @default(55)   // only message leads scoring >= this
+  minRelevanceScore Int      @default(65)   // premium bar — only message leads scoring >= this
   combosPerDay      Int      @default(3)    // city+category combos scraped per top-up
   messageProfileId  String?                 // which MessageProfile automation sends
+  targetQueries     String[] @default([])   // custom buyer categories (empty = premium defaults)
+  targetCities      String[] @default([])   // custom cities (empty = premium defaults)
 
   // Last-run snapshot (for the dashboard)
   lastRunAt         DateTime?

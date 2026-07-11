@@ -32,6 +32,8 @@ const updateSchema = z.object({
   minRelevanceScore: z.number().int().min(0).max(100).optional(),
   combosPerDay: z.number().int().min(1).max(8).optional(),
   messageProfileId: z.string().nullable().optional(),
+  targetQueries: z.array(z.string().min(1)).max(40).optional(),
+  targetCities: z.array(z.string().min(1)).max(60).optional(),
 });
 
 router.put('/', authenticate, async (req: AuthenticatedRequest, res: Response<ApiResponse>) => {

@@ -166,6 +166,8 @@ export interface AutomationSettings {
   minRelevanceScore: number;
   combosPerDay: number;
   messageProfileId: string | null;
+  targetQueries: string[];
+  targetCities: string[];
   lastRunAt: string | null;
   lastRunDate: string | null;
   lastRunTargets: string[];
@@ -229,7 +231,7 @@ export const automationApi = {
     const { data } = await api.get<ApiResponse<OutreachRun[]>>('/automation/runs');
     return data;
   },
-  update: async (settings: Partial<Pick<AutomationSettings, 'enabled' | 'workStartHourIST' | 'workEndHourIST' | 'dailyCap' | 'maxPerBatch' | 'minRelevanceScore' | 'combosPerDay' | 'messageProfileId'>>) => {
+  update: async (settings: Partial<Pick<AutomationSettings, 'enabled' | 'workStartHourIST' | 'workEndHourIST' | 'dailyCap' | 'maxPerBatch' | 'minRelevanceScore' | 'combosPerDay' | 'messageProfileId' | 'targetQueries' | 'targetCities'>>) => {
     const { data } = await api.put<ApiResponse<AutomationSettings>>('/automation', settings);
     return data;
   },

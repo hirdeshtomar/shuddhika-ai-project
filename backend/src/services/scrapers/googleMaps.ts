@@ -16,6 +16,7 @@ interface NewPlaceResult {
   rating?: number;
   userRatingCount?: number;
   businessStatus?: string;
+  priceLevel?: string; // PRICE_LEVEL_INEXPENSIVE .. PRICE_LEVEL_VERY_EXPENSIVE
 }
 
 interface SearchResult {
@@ -37,6 +38,7 @@ const SEARCH_FIELD_MASK = [
   'places.rating',
   'places.userRatingCount',
   'places.businessStatus',
+  'places.priceLevel',
 ].join(',');
 
 /**
@@ -208,31 +210,61 @@ const TYPE_SCORES: Record<string, number> = {
 const NAME_KEYWORD_SCORES: Array<{ pattern: RegExp; score: number }> = [
   { pattern: /\b(oil|tel|ghani|tail)\b/i, score: 95 },          // oil traders/mills
   { pattern: /\b(pickle|achar|aachar|papad|namkeen|masala|spice)\b/i, score: 85 },
-  { pattern: /\b(kirana|kiryana|provision|general\s*stores?)\b/i, score: 80 },
+  { pattern: /\b(kirana|kiryana|provision|general\s*stores?)\b/i, score: 75 },
   { pattern: /\b(wholesale|wholesaler|traders?|trading|distributors?)\b/i, score: 75 },
   { pattern: /\b(sweets?|halwai|mithai|misthan)\b/i, score: 75 },
   { pattern: /\b(dhaba|bhojanalay|caterers?|catering)\b/i, score: 70 },
   { pattern: /\b(super\s*market|supermart|departmental)\b/i, score: 60 },
 ];
 
-export function scoreRelevance(name: string, types?: string[]): number {
+// PREMIUM signals — names that indicate a buyer who wants pure/high-quality oil
+// (and will pay ₹190–240/L), not the ₹160 cheap-oil corner shop.
+const PREMIUM_NAME_PATTERN =
+  /\b(organic|natural|cold[\s-]?pressed|wood[\s-]?pressed|kachi\s*ghani|gourmet|premium|pure|health|wellness|ayurved|ayurvedic|farm\s*fresh|artisan|nature'?s|24\s*mantra|conscious|desi)\b/i;
+
+export interface PremiumSignals {
+  priceLevel?: string;
+  rating?: number;
+  userRatingCount?: number;
+}
+
+export function scoreRelevance(name: string, types?: string[], signals?: PremiumSignals): number {
   const hasIrrelevantType = (types || []).some((t) => IRRELEVANT_TYPES.has(t));
 
-  // Best score from name keywords — explicit intent always wins over type
-  let nameScore = 0;
+  // Base score: name keyword intent, else place type
+  let base = 0;
   for (const { pattern, score } of NAME_KEYWORD_SCORES) {
-    if (pattern.test(name) && score > nameScore) nameScore = score;
+    if (pattern.test(name) && score > base) base = score;
   }
-  if (nameScore > 0) return nameScore;
-
-  if (hasIrrelevantType) return 0;
-
-  let typeScore = 0;
-  for (const t of types || []) {
-    const s = TYPE_SCORES[t];
-    if (s && s > typeScore) typeScore = s;
+  if (base === 0) {
+    if (hasIrrelevantType) return 0;
+    for (const t of types || []) {
+      const s = TYPE_SCORES[t];
+      if (s && s > base) base = s;
+    }
   }
-  return typeScore;
+  if (base === 0) return 0;
+
+  // ── Premium boosts (favour buyers who want quality oil) ──
+  let score = base;
+
+  // Premium name (organic / gourmet / cold-pressed / pure ...) is the strongest signal
+  if (PREMIUM_NAME_PATTERN.test(name)) score = Math.max(score, 88) + 7;
+
+  // Google price level: expensive businesses skew premium
+  const pl = signals?.priceLevel;
+  if (pl === 'PRICE_LEVEL_VERY_EXPENSIVE') score += 12;
+  else if (pl === 'PRICE_LEVEL_EXPENSIVE') score += 8;
+  else if (pl === 'PRICE_LEVEL_INEXPENSIVE') score -= 8; // cheap-positioned
+
+  // Established, well-reviewed businesses are more organised / quality-focused
+  const rating = signals?.rating ?? 0;
+  const reviews = signals?.userRatingCount ?? 0;
+  if (rating >= 4.3 && reviews >= 50) score += 6;
+  else if (rating >= 4.0 && reviews >= 20) score += 3;
+  else if (reviews < 5) score -= 5; // tiny unknown shop — likely cheap/unorganised
+
+  return Math.max(0, Math.min(100, score));
 }
 
 /**
@@ -296,15 +328,14 @@ async function processPlaces(
         continue;
       }
 
-      // Relevance filter: skip businesses unlikely to buy mustard oil
-      let relevanceScore = scoreRelevance(businessName, place.types);
+      // Relevance filter (now premium-aware: price level + rating + name)
+      const relevanceScore = scoreRelevance(businessName, place.types, {
+        priceLevel: place.priceLevel,
+        rating: place.rating,
+        userRatingCount: place.userRatingCount,
+      });
       if (relevanceScore < MIN_RELEVANCE_SCORE) {
         continue;
-      }
-
-      // Small boost for established businesses (many reviews = real, active shop)
-      if ((place.userRatingCount || 0) >= 50) {
-        relevanceScore = Math.min(100, relevanceScore + 5);
       }
 
       // Check for duplicate

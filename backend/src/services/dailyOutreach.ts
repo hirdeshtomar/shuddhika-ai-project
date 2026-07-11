@@ -17,23 +17,27 @@ import { getAutomationSettings, istDateString, istHour, istStartOfToday } from '
  * quality rules), so keep DAILY_OUTREACH_CAP modest and let replies do the work.
  */
 
-// High-intent buyer categories (best mustard-oil prospects first)
+// PREMIUM default categories — buyers who want pure/quality oil, not the cheapest.
+// (Editable per-account via AutomationSettings.targetQueries.)
 const OUTREACH_QUERIES = [
-  'edible oil wholesaler',
-  'mustard oil dealer',
-  'kirana store',
-  'wholesale grocery',
-  'pickle manufacturers',
-  'namkeen manufacturers',
-  'sweet shops',
-  'provision stores',
+  'organic food store',
+  'organic store',
+  'health food store',
+  'gourmet food store',
+  'premium supermarket',
+  'cold pressed oil store',
+  'pickle manufacturer',
+  'namkeen manufacturer',
+  'sweet shop',
+  'bakery',
 ];
 
-// Cities to rotate through (mustard-oil-strong states weighted first)
+// PREMIUM default cities — metros & affluent hubs where premium demand concentrates.
+// (Editable per-account via AutomationSettings.targetCities.)
 const OUTREACH_CITIES = [
-  'Lucknow', 'Kanpur', 'Patna', 'Varanasi', 'Gorakhpur',
-  'Jaipur', 'Jodhpur', 'Kolkata', 'Bhopal', 'Indore',
-  'Ranchi', 'Agra', 'Meerut', 'Ludhiana', 'Delhi',
+  'Delhi', 'Gurugram', 'Noida', 'Mumbai', 'Pune',
+  'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata',
+  'Chandigarh', 'Ahmedabad', 'Jaipur',
 ];
 
 /** Deterministic day index so the rotation advances one step per calendar day. */
@@ -111,11 +115,14 @@ export async function runDailyOutreach(opts: { force?: boolean } = {}): Promise<
     lastContactedAt: null,
     relevanceScore: { gte: relevanceMin },
   };
+  const queries = settings.targetQueries?.length ? settings.targetQueries : OUTREACH_QUERIES;
+  const cities = settings.targetCities?.length ? settings.targetCities : OUTREACH_CITIES;
+
   const available = await prisma.lead.count({ where: qualifyingWhere });
   if (available < batch) {
     for (let i = 0; i < settings.combosPerDay; i++) {
-      const query = OUTREACH_QUERIES[(d + i) % OUTREACH_QUERIES.length]!;
-      const city = OUTREACH_CITIES[(d * settings.combosPerDay + hour + i) % OUTREACH_CITIES.length]!;
+      const query = queries[(d + i) % queries.length]!;
+      const city = cities[(d * settings.combosPerDay + hour + i) % cities.length]!;
       result.targets.push(`${query} in ${city}`);
       try {
         const scr = await scrapeGoogleMaps(query, city);
