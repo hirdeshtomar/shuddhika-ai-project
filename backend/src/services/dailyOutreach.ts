@@ -17,27 +17,31 @@ import { getAutomationSettings, istDateString, istHour, istStartOfToday } from '
  * quality rules), so keep DAILY_OUTREACH_CAP modest and let replies do the work.
  */
 
-// PREMIUM default categories — buyers who want pure/quality oil, not the cheapest.
-// (Editable per-account via AutomationSettings.targetQueries.)
+// BALANCED default categories — premium-leaning buyers plus solid volume resellers.
+// Premium scoring still ranks the quality buyers higher. (Editable per-account.)
 const OUTREACH_QUERIES = [
+  // Premium / quality-focused
   'organic food store',
-  'organic store',
   'health food store',
   'gourmet food store',
-  'premium supermarket',
   'cold pressed oil store',
+  // Quality-focused makers (need pure oil)
   'pickle manufacturer',
   'namkeen manufacturer',
   'sweet shop',
-  'bakery',
+  // Volume resellers
+  'kirana store',
+  'wholesale grocery',
+  'supermarket',
+  'provision store',
+  'edible oil wholesaler',
 ];
 
-// PREMIUM default cities — metros & affluent hubs where premium demand concentrates.
+// BALANCED default cities — metros/affluent hubs + strong mustard-belt tier-2 towns.
 // (Editable per-account via AutomationSettings.targetCities.)
 const OUTREACH_CITIES = [
-  'Delhi', 'Gurugram', 'Noida', 'Mumbai', 'Pune',
-  'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata',
-  'Chandigarh', 'Ahmedabad', 'Jaipur',
+  'Delhi', 'Gurugram', 'Noida', 'Mumbai', 'Pune', 'Bangalore', 'Hyderabad', 'Kolkata',
+  'Lucknow', 'Kanpur', 'Patna', 'Varanasi', 'Jaipur', 'Indore', 'Chandigarh', 'Agra',
 ];
 
 /** Deterministic day index so the rotation advances one step per calendar day. */

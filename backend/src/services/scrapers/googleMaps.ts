@@ -210,7 +210,7 @@ const TYPE_SCORES: Record<string, number> = {
 const NAME_KEYWORD_SCORES: Array<{ pattern: RegExp; score: number }> = [
   { pattern: /\b(oil|tel|ghani|tail)\b/i, score: 95 },          // oil traders/mills
   { pattern: /\b(pickle|achar|aachar|papad|namkeen|masala|spice)\b/i, score: 85 },
-  { pattern: /\b(kirana|kiryana|provision|general\s*stores?)\b/i, score: 75 },
+  { pattern: /\b(kirana|kiryana|provision|general\s*stores?)\b/i, score: 80 },
   { pattern: /\b(wholesale|wholesaler|traders?|trading|distributors?)\b/i, score: 75 },
   { pattern: /\b(sweets?|halwai|mithai|misthan)\b/i, score: 75 },
   { pattern: /\b(dhaba|bhojanalay|caterers?|catering)\b/i, score: 70 },
@@ -245,24 +245,25 @@ export function scoreRelevance(name: string, types?: string[], signals?: Premium
   }
   if (base === 0) return 0;
 
-  // ── Premium boosts (favour buyers who want quality oil) ──
+  // ── Balanced premium preference ──
+  // Premium signals lift a lead's rank, but we don't hard-exclude solid volume
+  // buyers (kirana / wholesale). The relevance threshold does the gating.
   let score = base;
 
-  // Premium name (organic / gourmet / cold-pressed / pure ...) is the strongest signal
-  if (PREMIUM_NAME_PATTERN.test(name)) score = Math.max(score, 88) + 7;
+  // Premium name (organic / gourmet / cold-pressed / pure ...) — strong preference
+  if (PREMIUM_NAME_PATTERN.test(name)) score = Math.max(score, 85) + 6;
 
-  // Google price level: expensive businesses skew premium
+  // Google price level: nudge, not a gate
   const pl = signals?.priceLevel;
-  if (pl === 'PRICE_LEVEL_VERY_EXPENSIVE') score += 12;
-  else if (pl === 'PRICE_LEVEL_EXPENSIVE') score += 8;
-  else if (pl === 'PRICE_LEVEL_INEXPENSIVE') score -= 8; // cheap-positioned
+  if (pl === 'PRICE_LEVEL_VERY_EXPENSIVE') score += 10;
+  else if (pl === 'PRICE_LEVEL_EXPENSIVE') score += 6;
+  else if (pl === 'PRICE_LEVEL_INEXPENSIVE') score -= 3; // mild
 
-  // Established, well-reviewed businesses are more organised / quality-focused
+  // Established, well-reviewed businesses rank a little higher (no penalty for small)
   const rating = signals?.rating ?? 0;
   const reviews = signals?.userRatingCount ?? 0;
   if (rating >= 4.3 && reviews >= 50) score += 6;
   else if (rating >= 4.0 && reviews >= 20) score += 3;
-  else if (reviews < 5) score -= 5; // tiny unknown shop — likely cheap/unorganised
 
   return Math.max(0, Math.min(100, score));
 }

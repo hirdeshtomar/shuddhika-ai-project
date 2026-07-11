@@ -25,7 +25,7 @@ export default function Automation() {
     workEndHourIST: 18,
     dailyCap: 60,
     maxPerBatch: 20,
-    minRelevanceScore: 65,
+    minRelevanceScore: 55,
     combosPerDay: 3,
     messageProfileId: '' as string,
     targetQueriesText: '',
@@ -219,7 +219,10 @@ export default function Automation() {
             onChange={(e) => setForm({ ...form, minRelevanceScore: Number(e.target.value) })}
             className="w-full"
           />
-          <p className="text-xs text-gray-500 mt-1">Higher = only the strongest mustard-oil prospects get messaged.</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Balanced ~55: premium buyers rank first, solid kirana/wholesale still qualify.
+            Raise toward 70 for premium-only; lower for more volume.
+          </p>
         </div>
 
         <div>
@@ -236,11 +239,11 @@ export default function Automation() {
         </div>
 
         <div className="border-t border-gray-100 pt-4">
-          <p className="font-medium text-gray-900 mb-1">Who to target (premium buyers)</p>
+          <p className="font-medium text-gray-900 mb-1">Who to target</p>
           <p className="text-xs text-gray-500 mb-3">
-            One per line. Leave blank to use the built-in premium defaults (organic / gourmet /
-            specialty stores, quality-focused makers, in metros). Scoring already favours
-            organic, cold-pressed, gourmet, high-rating and higher-priced businesses.
+            One per line. Leave blank for the balanced defaults (premium stores &amp; quality
+            makers plus kirana/wholesale, across metros and mustard-belt towns). Scoring still
+            ranks organic / cold-pressed / gourmet / high-rating buyers higher.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
