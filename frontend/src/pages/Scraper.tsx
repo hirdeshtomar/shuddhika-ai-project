@@ -118,7 +118,9 @@ export default function Scraper() {
     },
   });
 
-  const isConfigured = statusData?.googleMaps?.configured;
+  // Optimistic: only treat as NOT configured if the server explicitly says so.
+  // A failed/slow status check should not permanently disable searching.
+  const isConfigured = statusData?.googleMaps?.configured !== false;
   const jobs = jobsData || [];
   const isSearching = scrapeMutation.isPending || deepScrapeMutation.isPending;
   const deepSearchCities = suggestions?.deepSearchCities || [];
