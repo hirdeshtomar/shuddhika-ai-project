@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shuddhika-v2';
+const CACHE_NAME = 'shuddhika-v3';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -24,7 +24,11 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first for API calls, cache-first for static assets
+// Fetch strategy:
+//  - API calls: always network (skip SW)
+//  - Page navigations (HTML): network-first, so a new deploy shows immediately;
+//    fall back to cache only when offline
+//  - Hashed static assets (JS/CSS/images): cache-first for speed
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
@@ -34,16 +38,34 @@ self.addEventListener('fetch', (event) => {
   // API calls: always go to network
   if (request.url.includes('/api/')) return;
 
+  // Navigation requests (the HTML shell): network-first
+  const isNavigation =
+    request.mode === 'navigate' ||
+    (request.headers.get('accept') || '').includes('text/html');
+
+  if (isNavigation) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put('/', clone));
+          return response;
+        })
+        .catch(() => caches.match(request).then((c) => c || caches.match('/')))
+    );
+    return;
+  }
+
+  // Static assets: cache-first
   event.respondWith(
     caches.match(request).then((cached) => {
       const fetchPromise = fetch(request).then((response) => {
-        // Cache successful responses for static assets
         if (response.ok && response.type === 'basic') {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
         return response;
-      }).catch(() => cached); // Fallback to cache if offline
+      }).catch(() => cached);
 
       return cached || fetchPromise;
     })
