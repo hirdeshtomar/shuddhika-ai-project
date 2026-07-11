@@ -147,10 +147,10 @@ export const leadsApi = {
   },
 
   // Send the approved WhatsApp template to selected leads via AiSensy
-  sendWhatsApp: async (leadIds: string[]) => {
+  sendWhatsApp: async (leadIds: string[], profileId?: string) => {
     const { data } = await api.post<ApiResponse<{ sent: number; failed: number; skipped: number; errors: string[] }>>(
       '/aisensy/send-leads',
-      { leadIds }
+      { leadIds, profileId }
     );
     return data;
   },
@@ -162,6 +162,7 @@ export interface AutomationSettings {
   dailyCap: number;
   minRelevanceScore: number;
   combosPerDay: number;
+  messageProfileId: string | null;
   lastRunAt: string | null;
   lastRunDate: string | null;
   lastRunTargets: string[];
@@ -187,6 +188,35 @@ export interface OutreachRun {
   note: string | null;
 }
 
+export interface MessageProfile {
+  id: string;
+  name: string;
+  aisensyCampaignName: string;
+  templateParams: string;
+  mediaUrl: string | null;
+  mediaFilename: string | null;
+  isDefault: boolean;
+}
+
+export const messageProfilesApi = {
+  list: async () => {
+    const { data } = await api.get<ApiResponse<MessageProfile[]>>('/message-profiles');
+    return data;
+  },
+  create: async (p: Partial<MessageProfile>) => {
+    const { data } = await api.post<ApiResponse<MessageProfile>>('/message-profiles', p);
+    return data;
+  },
+  update: async (id: string, p: Partial<MessageProfile>) => {
+    const { data } = await api.put<ApiResponse<MessageProfile>>(`/message-profiles/${id}`, p);
+    return data;
+  },
+  remove: async (id: string) => {
+    const { data } = await api.delete<ApiResponse<void>>(`/message-profiles/${id}`);
+    return data;
+  },
+};
+
 export const automationApi = {
   get: async () => {
     const { data } = await api.get<ApiResponse<AutomationSettings>>('/automation');
@@ -196,7 +226,7 @@ export const automationApi = {
     const { data } = await api.get<ApiResponse<OutreachRun[]>>('/automation/runs');
     return data;
   },
-  update: async (settings: Partial<Pick<AutomationSettings, 'enabled' | 'runHourIST' | 'dailyCap' | 'minRelevanceScore' | 'combosPerDay'>>) => {
+  update: async (settings: Partial<Pick<AutomationSettings, 'enabled' | 'runHourIST' | 'dailyCap' | 'minRelevanceScore' | 'combosPerDay' | 'messageProfileId'>>) => {
     const { data } = await api.put<ApiResponse<AutomationSettings>>('/automation', settings);
     return data;
   },

@@ -16,7 +16,46 @@ const AISENSY_API_URL =
   process.env.AISENSY_API_URL || 'https://backend.aisensy.com/campaign/t1/api/v2';
 
 export function isAiSensyConfigured(): boolean {
-  return !!(process.env.AISENSY_API_KEY && process.env.AISENSY_CAMPAIGN_NAME);
+  // Sending needs the API key. The campaign can come from a MessageProfile or env.
+  return !!process.env.AISENSY_API_KEY;
+}
+
+/** A resolved send configuration (from a MessageProfile, or env fallback). */
+export interface SendProfile {
+  campaignName: string;
+  templateParams: string;      // "none" | "name" | "name,business" | ...
+  mediaUrl?: string | null;
+  mediaFilename?: string | null;
+}
+
+function envProfile(): SendProfile {
+  return {
+    campaignName: process.env.AISENSY_CAMPAIGN_NAME || '',
+    templateParams: process.env.AISENSY_TEMPLATE_PARAMS ?? 'name',
+    mediaUrl: process.env.AISENSY_MEDIA_URL || null,
+    mediaFilename: process.env.AISENSY_MEDIA_FILENAME || null,
+  };
+}
+
+/**
+ * Resolve which SendProfile to use:
+ *  - a specific MessageProfile by id, else
+ *  - the default MessageProfile, else
+ *  - env fallback (AISENSY_CAMPAIGN_NAME etc.)
+ */
+export async function resolveSendProfile(profileId?: string | null): Promise<SendProfile> {
+  const { prisma } = await import('../config/database.js');
+  let p = null;
+  if (profileId) p = await prisma.messageProfile.findUnique({ where: { id: profileId } });
+  if (!p) p = await prisma.messageProfile.findFirst({ where: { isDefault: true } });
+  if (!p) p = await prisma.messageProfile.findFirst({ orderBy: { createdAt: 'asc' } });
+  if (!p) return envProfile();
+  return {
+    campaignName: p.aisensyCampaignName,
+    templateParams: p.templateParams,
+    mediaUrl: p.mediaUrl,
+    mediaFilename: p.mediaFilename,
+  };
 }
 
 /** Normalise an Indian phone to AiSensy's expected "91XXXXXXXXXX" (no +). */
@@ -36,30 +75,34 @@ export interface AiSensySendResult {
  * templateParams map to {{1}}, {{2}}, ... in the approved AiSensy campaign template.
  * We pass name + business name by default (matches our other templates).
  */
-export async function sendLeadViaAiSensy(lead: {
-  id: string;
-  name: string;
-  phone: string;
-  businessName?: string | null;
-  city?: string | null;
-}): Promise<AiSensySendResult> {
+export async function sendLeadViaAiSensy(
+  lead: {
+    id: string;
+    name: string;
+    phone: string;
+    businessName?: string | null;
+    city?: string | null;
+  },
+  profile?: SendProfile
+): Promise<AiSensySendResult> {
   if (!isAiSensyConfigured()) {
-    return { success: false, error: 'AiSensy not configured' };
+    return { success: false, error: 'AiSensy not configured (missing AISENSY_API_KEY)' };
   }
 
-  // Build templateParams to MATCH the approved AiSensy template's {{ }} variables.
-  // Controlled by AISENSY_TEMPLATE_PARAMS (comma-separated field names, in order):
-  //   ""  or "none"      -> no variables  (template has no {{1}})   e.g. "Hello, we manufacture..."
-  //   "name"             -> 1 variable {{1}} = shop/contact name    (default)
-  //   "name,business"    -> 2 variables {{1}} {{2}}
-  //   "name,business,city" -> 3 variables, etc.
+  const cfg = profile ?? envProfile();
+  if (!cfg.campaignName) {
+    return { success: false, error: 'No AiSensy campaign selected (pick a message template)' };
+  }
+
+  // Build templateParams to MATCH the campaign template's {{ }} variables.
+  //   "none" -> no variables; "name" -> {{1}}=name; "name,business" -> {{1}}{{2}}; ...
   const fieldMap: Record<string, string> = {
     name: lead.name || lead.businessName || 'there',
     business: lead.businessName || lead.name || 'your business',
     businessname: lead.businessName || lead.name || 'your business',
     city: lead.city || '',
   };
-  const spec = (process.env.AISENSY_TEMPLATE_PARAMS ?? 'name').trim().toLowerCase();
+  const spec = (cfg.templateParams ?? 'name').trim().toLowerCase();
   const templateParams =
     spec === '' || spec === 'none'
       ? []
@@ -67,7 +110,7 @@ export async function sendLeadViaAiSensy(lead: {
 
   const payload: Record<string, any> = {
     apiKey: process.env.AISENSY_API_KEY,
-    campaignName: process.env.AISENSY_CAMPAIGN_NAME,
+    campaignName: cfg.campaignName,
     destination: toAiSensyDestination(lead.phone),
     userName: lead.name || lead.businessName || 'there',
     source: 'shuddhika-scraper',
@@ -79,13 +122,11 @@ export async function sendLeadViaAiSensy(lead: {
     },
   };
 
-  // Header video: pass the real media URL on every send (overrides the template's
-  // approval-sample video). Set AISENSY_MEDIA_URL to a public direct URL —
-  // a Supabase public-bucket link works best for WhatsApp streaming.
-  if (process.env.AISENSY_MEDIA_URL) {
+  // Header media (e.g. video link) overrides the template's approval sample.
+  if (cfg.mediaUrl) {
     payload.media = {
-      url: process.env.AISENSY_MEDIA_URL,
-      filename: process.env.AISENSY_MEDIA_FILENAME || 'shuddhika-mustard-oil.mp4',
+      url: cfg.mediaUrl,
+      filename: cfg.mediaFilename || 'shuddhika-mustard-oil.mp4',
     };
   }
 
@@ -95,7 +136,7 @@ export async function sendLeadViaAiSensy(lead: {
       leadId: lead.id,
       channel: 'WHATSAPP',
       direction: 'OUTBOUND',
-      content: `AiSensy campaign: ${process.env.AISENSY_CAMPAIGN_NAME}`,
+      content: `AiSensy campaign: ${cfg.campaignName}`,
       status: 'PENDING',
     },
   });

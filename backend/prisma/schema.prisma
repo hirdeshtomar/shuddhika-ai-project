@@ -312,6 +312,22 @@ enum JobStatus {
   FAILED
 }
 
+// A reusable send configuration ("template profile"): which AiSensy campaign to
+// use, how many template variables it has, and the header media (e.g. video link).
+model MessageProfile {
+  id                  String   @id @default(cuid())
+  name                String                       // friendly label shown in dropdowns
+  aisensyCampaignName String                       // the "Live" API campaign name in AiSensy
+  templateParams      String   @default("name")    // "none" | "name" | "name,business" | ...
+  mediaUrl            String?                       // header video/image URL (optional)
+  mediaFilename       String?
+  isDefault           Boolean  @default(false)      // preselected in send + automation
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("message_profiles")
+}
+
 // Log of every outreach run (manual "Send WhatsApp" or automated daily)
 model OutreachRun {
   id           String   @id @default(cuid())
@@ -341,6 +357,7 @@ model AutomationSettings {
   dailyCap          Int      @default(15)   // max messages sent per day
   minRelevanceScore Int      @default(55)   // only message leads scoring >= this
   combosPerDay      Int      @default(3)    // city+category combos scraped per day
+  messageProfileId  String?                 // which MessageProfile automation sends
 
   // Last-run snapshot (for the dashboard)
   lastRunAt         DateTime?

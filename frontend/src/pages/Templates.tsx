@@ -1,390 +1,152 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Send, Trash2, RefreshCw, X, FileText, Check, Clock, XCircle } from 'lucide-react';
+import { FileText, Plus, Trash2, Star, Video } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { templatesApi } from '../services/api';
-import type { MessageTemplate } from '../types';
+import { messageProfilesApi, type MessageProfile } from '../services/api';
+
+const PARAM_OPTIONS = [
+  { value: 'none', label: 'No variables (message has no {{1}})' },
+  { value: 'name', label: 'One variable — {{1}} = shop/contact name' },
+  { value: 'name,business', label: 'Two — {{1}} name, {{2}} business' },
+  { value: 'name,business,city', label: 'Three — {{1}} name, {{2}} business, {{3}} city' },
+];
+
+const blank: Partial<MessageProfile> = {
+  name: '', aisensyCampaignName: '', templateParams: 'name', mediaUrl: '', mediaFilename: '', isDefault: false,
+};
 
 export default function Templates() {
   const queryClient = useQueryClient();
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const { data } = useQuery({ queryKey: ['message-profiles'], queryFn: messageProfilesApi.list });
+  const profiles = data?.data || [];
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['templates'],
-    queryFn: templatesApi.list,
-  });
+  const [editing, setEditing] = useState<Partial<MessageProfile> | null>(null);
 
-  const syncMutation = useMutation({
-    mutationFn: templatesApi.sync,
+  const saveMutation = useMutation({
+    mutationFn: (p: Partial<MessageProfile>) =>
+      p.id ? messageProfilesApi.update(p.id, p) : messageProfilesApi.create(p),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['templates'] });
-      toast.success('Templates synced from WhatsApp');
+      queryClient.invalidateQueries({ queryKey: ['message-profiles'] });
+      setEditing(null);
+      toast.success('Template saved');
     },
-    onError: () => toast.error('Sync failed'),
-  });
-
-  const submitMutation = useMutation({
-    mutationFn: templatesApi.submit,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['templates'] });
-      toast.success('Template submitted for approval');
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Submission failed');
-    },
+    onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to save'),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: templatesApi.delete,
+    mutationFn: messageProfilesApi.remove,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      queryClient.invalidateQueries({ queryKey: ['message-profiles'] });
       toast.success('Template deleted');
     },
-    onError: () => toast.error('Delete failed'),
   });
 
-  const templates = data?.data || [];
-
   return (
-    <div>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Message Templates</h1>
-          <p className="text-gray-500 mt-1">
-            Create and manage WhatsApp message templates
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => syncMutation.mutate()}
-            className="btn btn-secondary flex items-center gap-2"
-            disabled={syncMutation.isPending}
-          >
-            <RefreshCw size={18} className={syncMutation.isPending ? 'animate-spin' : ''} />
-            Sync
-          </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="btn btn-primary flex items-center gap-2"
-          >
-            <Plus size={18} />
-            Create Template
-          </button>
-        </div>
-      </div>
-
-      {/* Info Card */}
-      <div className="card p-4 mb-6 bg-blue-50 border-blue-200">
-        <div className="flex gap-3">
-          <FileText className="text-blue-600 flex-shrink-0" size={20} />
-          <div className="text-sm text-blue-800">
-            <p className="font-medium mb-1">About WhatsApp Templates</p>
-            <p>
-              WhatsApp requires all outreach messages to use pre-approved templates.
-              Create your template here, then submit it for Meta's approval (24-48 hours).
-              Use {"{{1}}"}, {"{{2}}"} etc. as placeholders for dynamic content.
-            </p>
+    <div className="max-w-3xl">
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-primary-500 rounded-lg flex items-center justify-center">
+            <FileText className="text-white" size={22} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Message Templates</h1>
+            <p className="text-gray-500 text-sm">Your AiSensy campaigns, ready to pick when sending</p>
           </div>
         </div>
+        <button className="btn btn-primary flex items-center gap-2" onClick={() => setEditing({ ...blank })}>
+          <Plus size={18} /> Add
+        </button>
       </div>
 
-      {/* Templates List */}
-      <div className="space-y-4">
-        {isLoading ? (
-          <div className="card p-8 text-center text-gray-500">Loading...</div>
-        ) : templates.length === 0 ? (
-          <div className="card p-8 text-center text-gray-500">
-            No templates yet. Create your first message template.
-          </div>
-        ) : (
-          templates.map((template) => (
-            <div key={template.id} className="card p-4">
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="font-semibold text-gray-900">{template.name}</h3>
-                    <StatusBadge status={template.status} />
-                    <span className="badge bg-gray-100 text-gray-600">
-                      {template.language === 'hi' ? 'Hindi' : 'English'}
-                    </span>
-                    <span className="badge bg-gray-100 text-gray-600">
-                      {template.category}
-                    </span>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-3 mt-2">
-                    <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
-                      {template.bodyText}
-                    </pre>
-                    {template.footerText && (
-                      <p className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200">
-                        {template.footerText}
-                      </p>
-                    )}
-                  </div>
-                </div>
+      <div className="card p-4 mb-6 bg-blue-50 border-blue-200 text-sm text-blue-800">
+        AiSensy doesn't let apps list templates automatically, so add each one here once:
+        give it a name, paste the exact <strong>AiSensy API campaign name</strong>, choose how many
+        <code className="mx-1">{'{{ }}'}</code>variables its message has, and (for video templates) the video link.
+      </div>
+
+      {profiles.length === 0 ? (
+        <div className="card p-8 text-center text-gray-500">No templates yet. Click “Add”.</div>
+      ) : (
+        <div className="space-y-3">
+          {profiles.map((p) => (
+            <div key={p.id} className="card p-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  {(template.status === 'DRAFT' || template.status === 'REJECTED') && (
-                    <button
-                      onClick={() => submitMutation.mutate(template.id)}
-                      className="btn btn-primary text-sm py-1.5"
-                      disabled={submitMutation.isPending}
-                    >
-                      <Send size={16} className="mr-1" />
-                      Submit for Approval
-                    </button>
-                  )}
-                  {template.status !== 'APPROVED' && (
-                    <button
-                      onClick={() => {
-                        if (confirm('Delete this template?')) {
-                          deleteMutation.mutate(template.id);
-                        }
-                      }}
-                      className="p-2 text-gray-400 hover:text-red-600"
-                      title="Delete"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                  <p className="font-medium text-gray-900">{p.name}</p>
+                  {p.isDefault && (
+                    <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                      <Star size={10} /> Default
+                    </span>
                   )}
                 </div>
+                <p className="text-sm text-gray-500 mt-0.5">Campaign: <code>{p.aisensyCampaignName}</code></p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Variables: {p.templateParams === 'none' ? 'none' : p.templateParams}
+                  {p.mediaUrl && <span className="inline-flex items-center gap-1 ml-2"><Video size={11} /> video set</span>}
+                </p>
+              </div>
+              <div className="flex gap-1 flex-shrink-0">
+                <button className="btn btn-secondary text-sm py-1" onClick={() => setEditing(p)}>Edit</button>
+                <button
+                  className="p-2 text-gray-400 hover:text-red-600"
+                  onClick={() => { if (confirm(`Delete "${p.name}"?`)) deleteMutation.mutate(p.id); }}
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Create Modal */}
-      {showCreateModal && (
-        <CreateTemplateModal onClose={() => setShowCreateModal(false)} />
+      {editing && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setEditing(null)}>
+          <div className="bg-white rounded-xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold mb-4">{editing.id ? 'Edit' : 'Add'} Template</h2>
+            <div className="space-y-4">
+              <Field label="Name (shown in dropdowns)">
+                <input className="input" value={editing.name || ''} placeholder="Mustard Oil Intro (video)"
+                  onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+              </Field>
+              <Field label="AiSensy API campaign name (must match exactly, status Live)">
+                <input className="input" value={editing.aisensyCampaignName || ''} placeholder="shuddhika_daily_outreach"
+                  onChange={(e) => setEditing({ ...editing, aisensyCampaignName: e.target.value })} />
+              </Field>
+              <Field label="How many variables does the message have?">
+                <select className="input" value={editing.templateParams || 'name'}
+                  onChange={(e) => setEditing({ ...editing, templateParams: e.target.value })}>
+                  {PARAM_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Header video/image link (optional — for media templates)">
+                <input className="input" value={editing.mediaUrl || ''} placeholder="https://…supabase.co/…/video.mp4"
+                  onChange={(e) => setEditing({ ...editing, mediaUrl: e.target.value })} />
+              </Field>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={!!editing.isDefault}
+                  onChange={(e) => setEditing({ ...editing, isDefault: e.target.checked })} />
+                Use as default (preselected when sending &amp; for automation)
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button className="btn btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
+              <button className="btn btn-primary" disabled={saveMutation.isPending || !editing.name || !editing.aisensyCampaignName}
+                onClick={() => saveMutation.mutate(editing)}>
+                {saveMutation.isPending ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: MessageTemplate['status'] }) {
-  const config: Record<
-    MessageTemplate['status'],
-    { color: string; icon: React.ReactNode }
-  > = {
-    DRAFT: { color: 'bg-gray-100 text-gray-800', icon: null },
-    PENDING_APPROVAL: {
-      color: 'bg-yellow-100 text-yellow-800',
-      icon: <Clock size={12} />,
-    },
-    APPROVED: {
-      color: 'bg-green-100 text-green-800',
-      icon: <Check size={12} />,
-    },
-    REJECTED: {
-      color: 'bg-red-100 text-red-800',
-      icon: <XCircle size={12} />,
-    },
-  };
-
-  const { color, icon } = config[status];
-
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <span className={`badge ${color} flex items-center gap-1`}>
-      {icon}
-      {status.replace(/_/g, ' ')}
-    </span>
-  );
-}
-
-function CreateTemplateModal({ onClose }: { onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const [formData, setFormData] = useState({
-    name: '',
-    language: 'hi',
-    category: 'MARKETING' as const,
-    bodyText: '',
-    footerText: '',
-  });
-
-  const { data: examplesData } = useQuery({
-    queryKey: ['template-examples'],
-    queryFn: templatesApi.getExamples,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: templatesApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['templates'] });
-      toast.success('Template created');
-      onClose();
-    },
-    onError: () => toast.error('Failed to create template'),
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    createMutation.mutate(formData);
-  };
-
-  const loadExample = (example: Partial<MessageTemplate>) => {
-    setFormData({
-      name: example.name || '',
-      language: example.language || 'hi',
-      category: (example.category as any) || 'MARKETING',
-      bodyText: example.bodyText || '',
-      footerText: example.footerText || '',
-    });
-  };
-
-  const examples = examplesData?.data || [];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold">Create Message Template</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={20} />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          {/* Example Templates */}
-          {examples.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Load Example
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {examples.map((example, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => loadExample(example)}
-                    className="text-sm px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full"
-                  >
-                    {example.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Template Name *
-              </label>
-              <input
-                type="text"
-                className="input"
-                placeholder="e.g., Product Introduction"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Language *
-              </label>
-              <select
-                className="input"
-                value={formData.language}
-                onChange={(e) =>
-                  setFormData({ ...formData, language: e.target.value })
-                }
-              >
-                <option value="hi">Hindi</option>
-                <option value="en">English</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Category *
-            </label>
-            <select
-              className="input"
-              value={formData.category}
-              onChange={(e) =>
-                setFormData({ ...formData, category: e.target.value as any })
-              }
-            >
-              <option value="MARKETING">Marketing</option>
-              <option value="UTILITY">Utility</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Message Body *
-            </label>
-            <textarea
-              className="input font-mono text-sm"
-              rows={8}
-              placeholder={`नमस्ते {{1}}! 🙏
-
-शुद्धिका प्योर मस्टर्ड ऑयल - 100% शुद्ध सरसों का तेल
-
-✅ कोल्ड प्रेस्ड
-✅ कोई मिलावट नहीं
-
-संपर्क करें: {{2}}`}
-              value={formData.bodyText}
-              onChange={(e) =>
-                setFormData({ ...formData, bodyText: e.target.value })
-              }
-              required
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Use {"{{1}}"}, {"{{2}}"}, etc. for dynamic placeholders (name, contact, etc.)
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Footer (Optional)
-            </label>
-            <input
-              type="text"
-              className="input"
-              placeholder="e.g., Shuddhika - Guaranteed Purity"
-              value={formData.footerText}
-              onChange={(e) =>
-                setFormData({ ...formData, footerText: e.target.value })
-              }
-            />
-          </div>
-
-          {/* Preview */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Preview
-            </label>
-            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-              <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans">
-                {formData.bodyText || 'Your message will appear here...'}
-              </pre>
-              {formData.footerText && (
-                <p className="text-xs text-gray-500 mt-2 pt-2 border-t border-green-200">
-                  {formData.footerText}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4">
-            <button type="button" onClick={onClose} className="btn btn-secondary">
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={createMutation.isPending}
-            >
-              {createMutation.isPending ? 'Creating...' : 'Create Template'}
-            </button>
-          </div>
-        </form>
-      </div>
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      {children}
     </div>
   );
 }

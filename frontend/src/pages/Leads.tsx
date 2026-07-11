@@ -16,7 +16,7 @@ import {
   Send,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { leadsApi } from '../services/api';
+import { leadsApi, messageProfilesApi } from '../services/api';
 import type { Lead, LeadStatus } from '../types';
 
 export default function Leads() {
@@ -28,6 +28,14 @@ export default function Leads() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [sendProfileId, setSendProfileId] = useState<string>('');
+
+  const { data: profilesData } = useQuery({
+    queryKey: ['message-profiles'],
+    queryFn: messageProfilesApi.list,
+  });
+  const profiles = profilesData?.data || [];
 
   const { data, isLoading } = useQuery({
     queryKey: ['leads', page, search, statusFilter],
@@ -70,10 +78,12 @@ export default function Leads() {
   });
 
   const sendWhatsAppMutation = useMutation({
-    mutationFn: leadsApi.sendWhatsApp,
+    mutationFn: ({ ids, profileId }: { ids: string[]; profileId?: string }) =>
+      leadsApi.sendWhatsApp(ids, profileId),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       setSelectedLeads([]);
+      setShowSendModal(false);
       toast.success(res.message || 'Sent via WhatsApp');
     },
     onError: (err: any) =>
@@ -215,9 +225,8 @@ export default function Leads() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                if (confirm(`Send the WhatsApp template to ${selectedLeads.length} lead(s) via AiSensy?`)) {
-                  sendWhatsAppMutation.mutate(selectedLeads);
-                }
+                setSendProfileId(profiles.find((p) => p.isDefault)?.id || profiles[0]?.id || '');
+                setShowSendModal(true);
               }}
               disabled={sendWhatsAppMutation.isPending}
               className="btn btn-primary text-sm py-1"
@@ -411,6 +420,51 @@ export default function Leads() {
       {/* Import Modal */}
       {showImportModal && (
         <ImportModal onClose={() => setShowImportModal(false)} />
+      )}
+
+      {/* Send WhatsApp Modal — pick a template before sending */}
+      {showSendModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowSendModal(false)}>
+          <div className="bg-white rounded-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold mb-1">Send WhatsApp</h2>
+            <p className="text-sm text-gray-500 mb-4">To {selectedLeads.length} selected lead(s), via AiSensy.</p>
+
+            {profiles.length === 0 ? (
+              <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                No templates set up yet. Add one on the <strong>Templates</strong> page first.
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Template</label>
+                <select className="input" value={sendProfileId} onChange={(e) => setSendProfileId(e.target.value)}>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}{p.isDefault ? ' (default)' : ''}</option>
+                  ))}
+                </select>
+                {(() => {
+                  const p = profiles.find((x) => x.id === sendProfileId);
+                  return p ? (
+                    <p className="text-xs text-gray-400 mt-2">
+                      Campaign: {p.aisensyCampaignName} · Variables: {p.templateParams === 'none' ? 'none' : p.templateParams}
+                      {p.mediaUrl ? ' · video attached' : ''}
+                    </p>
+                  ) : null;
+                })()}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button className="btn btn-secondary" onClick={() => setShowSendModal(false)}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                disabled={profiles.length === 0 || !sendProfileId || sendWhatsAppMutation.isPending}
+                onClick={() => sendWhatsAppMutation.mutate({ ids: selectedLeads, profileId: sendProfileId })}
+              >
+                {sendWhatsAppMutation.isPending ? 'Sending…' : `Send to ${selectedLeads.length}`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

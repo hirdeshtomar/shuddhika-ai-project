@@ -1,6 +1,6 @@
 import { prisma } from '../config/database.js';
 import { scrapeGoogleMaps } from './scrapers/googleMaps.js';
-import { sendLeadViaAiSensy, isAiSensyConfigured } from './aisensy.js';
+import { sendLeadViaAiSensy, isAiSensyConfigured, resolveSendProfile } from './aisensy.js';
 import { sendPushNotification } from './pushNotification.js';
 import { getAutomationSettings, istDateString, istHour } from './automationSettings.js';
 
@@ -114,9 +114,10 @@ export async function runDailyOutreach(opts: { force?: boolean } = {}): Promise<
     take: dailyCap,
   });
 
+  const sendProfile = await resolveSendProfile(settings.messageProfileId);
   const errorsSample: string[] = [];
   for (const lead of candidates) {
-    const r = await sendLeadViaAiSensy(lead);
+    const r = await sendLeadViaAiSensy(lead, sendProfile);
     if (r.success) result.messagesSent++;
     else {
       result.messagesFailed++;

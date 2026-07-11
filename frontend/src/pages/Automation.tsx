@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Zap, Play, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { automationApi } from '../services/api';
+import { automationApi, messageProfilesApi } from '../services/api';
 
 export default function Automation() {
   const queryClient = useQueryClient();
@@ -12,6 +12,12 @@ export default function Automation() {
   });
   const settings = data?.data;
 
+  const { data: profilesData } = useQuery({
+    queryKey: ['message-profiles'],
+    queryFn: messageProfilesApi.list,
+  });
+  const profiles = profilesData?.data || [];
+
   // Local editable form state
   const [form, setForm] = useState({
     enabled: false,
@@ -19,6 +25,7 @@ export default function Automation() {
     dailyCap: 15,
     minRelevanceScore: 55,
     combosPerDay: 3,
+    messageProfileId: '' as string,
   });
 
   useEffect(() => {
@@ -29,6 +36,7 @@ export default function Automation() {
         dailyCap: settings.dailyCap,
         minRelevanceScore: settings.minRelevanceScore,
         combosPerDay: settings.combosPerDay,
+        messageProfileId: settings.messageProfileId || '',
       });
     }
   }, [settings]);
@@ -105,6 +113,26 @@ export default function Automation() {
             className="w-11 h-6 rounded-full appearance-none bg-gray-300 checked:bg-primary-500 relative transition-colors cursor-pointer before:content-[''] before:absolute before:top-0.5 before:left-0.5 before:w-5 before:h-5 before:bg-white before:rounded-full before:transition-transform checked:before:translate-x-5"
           />
         </label>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Template to send</label>
+          {profiles.length === 0 ? (
+            <p className="text-sm text-amber-600">
+              No templates yet — add one on the <a href="/templates" className="underline">Templates</a> page.
+            </p>
+          ) : (
+            <select
+              value={form.messageProfileId}
+              onChange={(e) => setForm({ ...form, messageProfileId: e.target.value })}
+              className="input w-full max-w-md"
+            >
+              <option value="">Default template</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}{p.isDefault ? ' (default)' : ''}</option>
+              ))}
+            </select>
+          )}
+        </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Run each day at</label>

@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Leads from './pages/Leads';
 import Scraper from './pages/Scraper';
 import Automation from './pages/Automation';
+import Templates from './pages/Templates';
 // ============================================================
 // AUTH DISABLED (temporary): login is bypassed. To restore:
 // re-add PrivateRoute around <Layout /> and the /login route
@@ -31,6 +32,7 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="leads" element={<Leads />} />
         <Route path="scraper" element={<Scraper />} />
+        <Route path="templates" element={<Templates />} />
         <Route path="automation" element={<Automation />} />
         {/* Retired (moved to AiSensy): campaigns, conversations, templates, auto-replies */}
         <Route path="*" element={<Navigate to="/" replace />} />
