@@ -46,10 +46,17 @@ export default function Automation() {
     mutationFn: automationApi.runNow,
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['automation'] });
+      queryClient.invalidateQueries({ queryKey: ['automation-runs'] });
       toast.success(res.message || 'Run triggered');
     },
     onError: (e: any) => toast.error(e?.response?.data?.error || 'Failed to run'),
   });
+
+  const { data: runsData } = useQuery({
+    queryKey: ['automation-runs'],
+    queryFn: automationApi.runs,
+  });
+  const runs = runsData?.data || [];
 
   if (isLoading) {
     return <div className="p-8 text-center text-gray-500">Loading…</div>;
@@ -204,6 +211,54 @@ export default function Automation() {
           </div>
         ) : (
           <p className="text-sm text-gray-500">Has not run yet. Use “Run Now” to test it.</p>
+        )}
+      </div>
+
+      {/* Run history */}
+      <div className="card p-6 mt-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Run History</h2>
+        {runs.length === 0 ? (
+          <p className="text-sm text-gray-500">No runs yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {runs.map((r) => (
+              <div key={r.id} className="border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${r.type === 'AUTOMATED' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {r.type === 'AUTOMATED' ? 'Automated' : 'Manual'}
+                    </span>
+                    <span className="text-sm text-gray-600">
+                      {new Date(r.startedAt).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-green-600 font-medium">{r.sent} sent</span>
+                    <span className="text-red-600 font-medium">{r.failed} failed</span>
+                    {r.skipped > 0 && <span className="text-gray-500">{r.skipped} skipped</span>}
+                    <span className="text-gray-400">of {r.totalLeads}</span>
+                  </div>
+                </div>
+                {r.targets?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {r.targets.map((t) => (
+                      <span key={t} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t}</span>
+                    ))}
+                  </div>
+                )}
+                {r.errorsSample?.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="text-xs text-red-600 cursor-pointer">Why messages failed ({r.errorsSample.length} shown)</summary>
+                    <ul className="mt-1 space-y-1">
+                      {r.errorsSample.map((e, i) => (
+                        <li key={i} className="text-xs text-gray-600 bg-red-50 rounded px-2 py-1">{e}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

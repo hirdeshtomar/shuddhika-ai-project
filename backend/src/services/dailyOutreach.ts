@@ -114,13 +114,31 @@ export async function runDailyOutreach(opts: { force?: boolean } = {}): Promise<
     take: dailyCap,
   });
 
+  const errorsSample: string[] = [];
   for (const lead of candidates) {
     const r = await sendLeadViaAiSensy(lead);
     if (r.success) result.messagesSent++;
-    else result.messagesFailed++;
+    else {
+      result.messagesFailed++;
+      if (r.error && errorsSample.length < 5) errorsSample.push(`${lead.name}: ${r.error}`);
+    }
     // Gentle spacing between sends
     await new Promise((res) => setTimeout(res, 1500));
   }
+
+  // Log this run to the history
+  await prisma.outreachRun.create({
+    data: {
+      type: 'AUTOMATED',
+      finishedAt: new Date(),
+      totalLeads: candidates.length,
+      sent: result.messagesSent,
+      failed: result.messagesFailed,
+      targets: result.targets,
+      errorsSample,
+      note: opts.force ? 'Manual "Run Now"' : 'Scheduled daily run',
+    },
+  }).catch((e: any) => console.error('[DailyOutreach] failed to log run:', e.message));
 
   // Record last-run snapshot + mark today done (so it won't repeat this calendar day)
   await prisma.automationSettings.update({

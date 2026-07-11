@@ -111,7 +111,14 @@ export default function Leads() {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Leads</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Leads
+            {data?.pagination && (
+              <span className="ml-2 text-base font-normal text-gray-400">
+                ({data.pagination.total.toLocaleString('en-IN')} total)
+              </span>
+            )}
+          </h1>
           <p className="text-gray-500 mt-1">
             Manage your potential customers
           </p>

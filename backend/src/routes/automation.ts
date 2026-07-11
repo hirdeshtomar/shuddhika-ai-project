@@ -41,6 +41,15 @@ router.put('/', authenticate, async (req: AuthenticatedRequest, res: Response<Ap
   res.json({ success: true, data: updated, message: 'Automation settings saved' });
 });
 
+// GET /api/automation/runs - recent run history (manual + automated)
+router.get('/runs', authenticate, async (_req: AuthenticatedRequest, res: Response<ApiResponse>) => {
+  const runs = await prisma.outreachRun.findMany({
+    orderBy: { startedAt: 'desc' },
+    take: 30,
+  });
+  res.json({ success: true, data: runs });
+});
+
 // POST /api/automation/run-now - trigger immediately (ignores schedule)
 router.post('/run-now', authenticate, async (_req: AuthenticatedRequest, res: Response<ApiResponse>) => {
   const result = await runDailyOutreach({ force: true });

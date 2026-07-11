@@ -173,9 +173,27 @@ export interface AutomationSettings {
   campaignName: string | null;
 }
 
+export interface OutreachRun {
+  id: string;
+  type: 'MANUAL' | 'AUTOMATED';
+  startedAt: string;
+  finishedAt: string | null;
+  totalLeads: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  targets: string[];
+  errorsSample: string[];
+  note: string | null;
+}
+
 export const automationApi = {
   get: async () => {
     const { data } = await api.get<ApiResponse<AutomationSettings>>('/automation');
+    return data;
+  },
+  runs: async () => {
+    const { data } = await api.get<ApiResponse<OutreachRun[]>>('/automation/runs');
     return data;
   },
   update: async (settings: Partial<Pick<AutomationSettings, 'enabled' | 'runHourIST' | 'dailyCap' | 'minRelevanceScore' | 'combosPerDay'>>) => {

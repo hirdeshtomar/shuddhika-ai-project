@@ -90,6 +90,15 @@ router.post('/send-leads', authenticate, async (req: AuthenticatedRequest, res: 
     },
   });
 
+  const run = await prisma.outreachRun.create({
+    data: {
+      type: 'MANUAL',
+      totalLeads: leadIds.length,
+      skipped: leadIds.length - leads.length,
+      note: 'Manual "Send WhatsApp" from Leads',
+    },
+  });
+
   let sent = 0;
   let failed = 0;
   const errors: string[] = [];
@@ -102,6 +111,11 @@ router.post('/send-leads', authenticate, async (req: AuthenticatedRequest, res: 
     }
     await new Promise((res) => setTimeout(res, 1200)); // gentle spacing
   }
+
+  await prisma.outreachRun.update({
+    where: { id: run.id },
+    data: { finishedAt: new Date(), sent, failed, errorsSample: errors },
+  });
 
   res.json({
     success: true,
